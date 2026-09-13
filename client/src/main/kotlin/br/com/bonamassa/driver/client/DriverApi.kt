@@ -29,10 +29,11 @@ data class Endpoint(val origin: String, val storeSlug: String) {
 }
 
 /** No redirects, automatic write retries, cookies or HTTP credential logging. */
-class DriverApi(val endpoint: Endpoint, private val http: OkHttpClient = newHttpClient()) {
+class DriverApi(val endpoint: Endpoint) {
+    private val http = newHttpClient()
     private val reads = http.newBuilder().retryOnConnectionFailure(true).build()
     companion object {
-        fun newHttpClient() = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+        private fun newHttpClient() = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
             // Node closes idle HTTP/1 connections after a few seconds. Retire ours first.
             .connectionPool(ConnectionPool(5, 2, TimeUnit.SECONDS))
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).callTimeout(30, TimeUnit.SECONDS).build()
