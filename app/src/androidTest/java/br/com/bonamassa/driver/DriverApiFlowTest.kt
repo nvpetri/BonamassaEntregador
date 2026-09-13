@@ -25,7 +25,9 @@ class DriverApiFlowTest {
     private fun waitText(text: String) = compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) {
         compose.waitUntil(30_000) { compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(text).performScrollTo().performClick()
+        val node = compose.onNodeWithText(text)
+        if (compose.onAllNodes(hasText(text) and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) node.performScrollTo()
+        node.performClick()
     }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
     private fun waitAvailable() = compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("availability") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }

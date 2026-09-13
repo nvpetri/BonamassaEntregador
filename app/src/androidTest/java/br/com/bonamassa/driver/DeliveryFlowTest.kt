@@ -23,8 +23,10 @@ class DeliveryFlowTest {
     @Before fun resetDemo() {
         runBlocking { LocalDriverRepository(InstrumentationRegistry.getInstrumentation().targetContext).reset() }
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        scenario.onActivity { activity -> activity.setContent { DriverTheme { DriverApp() } } }
+        mountDemo()
     }
+    // Same composition call site restores the same rememberSaveable keys after recreation.
+    private fun mountDemo() { scenario.onActivity { activity -> activity.setContent { DriverTheme { DriverApp() } } } }
     @After fun close() { scenario.close() }
 
     private fun awaitText(text: String) {
@@ -41,7 +43,7 @@ class DeliveryFlowTest {
         compose.onNodeWithText("Iniciar entrega").performClick()
         awaitText("Confirmar entrega")
         scenario.recreate()
-        scenario.onActivity { activity -> activity.setContent { DriverTheme { DriverApp() } } }
+        mountDemo()
         awaitText("Confirmar entrega")
         compose.onNodeWithText("Confirmar entrega").performClick()
         compose.onNodeWithText("Registrar entrega").assertIsNotEnabled()
