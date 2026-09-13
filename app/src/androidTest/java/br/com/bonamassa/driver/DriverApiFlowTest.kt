@@ -24,7 +24,12 @@ class DriverApiFlowTest {
     private fun key() = UUID.randomUUID().toString()
     private fun waitText(text: String) = compose.waitUntil(30_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) {
-        compose.waitUntil(30_000) { compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        try {
+            compose.waitUntil(30_000) { compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        } catch (e: Exception) {
+            screenshot("falha-clique.png")
+            throw AssertionError("Botão não disponível: $text", e)
+        }
         val node = compose.onNodeWithText(text)
         if (compose.onAllNodes(hasText(text) and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) node.performScrollTo()
         node.performClick()
@@ -107,13 +112,19 @@ class DriverApiFlowTest {
             assertEquals("DELIVERED", staffView.getString("status"))
             assertEquals("Recebedor Teste", staffView.getString("recipient"))
             assertEquals(1, delivered.events.count { it.action == "complete" })
+            // Transient confirmation snackbars may cover content/footer touch targets.
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Registro confirmado pela pizzaria.").fetchSemanticsNodes().isEmpty() }
             compose.onNodeWithText("Entrega concluída").performScrollTo()
             screenshot("entregador-concluido.png")
             compose.onNodeWithContentDescription("Voltar").performClick()
             compose.onNodeWithText("Histórico").performClick()
             waitText("1 entregas · 0 devoluções")
-            compose.onNodeWithText("Perfil").performClick(); click("Sair da conta"); click("Sair agora")
+            compose.onNodeWithText("Perfil").performClick()
+            click("Sair da conta")
+            click("Sair agora")
             waitText("Entrar nas entregas")
+            // Local sign-out renders first; wait for the server revocation to finish too.
+            compose.waitUntil(30_000) { compose.onAllNodes(hasText("E-mail") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             assertNull(secure.read()?.session)
             try { api.me(auth.accessToken); fail("Sessão deveria estar revogada") } catch (e: ApiFailure) { assertEquals(401, e.status) }
         }
