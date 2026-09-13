@@ -1,7 +1,13 @@
 package br.com.bonamassa.driver
 
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.activity.compose.setContent
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import br.com.bonamassa.driver.ui.DriverApp
+import br.com.bonamassa.driver.ui.DriverTheme
+import org.junit.After
 import br.com.bonamassa.driver.data.LocalDriverRepository
 import br.com.bonamassa.driver.ui.money
 import kotlinx.coroutines.runBlocking
@@ -11,9 +17,15 @@ import org.junit.Test
 
 /** Run only on a demo device: each test resets this app's local demonstration data. */
 class DeliveryFlowTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @get:Rule val compose = createEmptyComposeRule()
 
-    @Before fun resetDemo() = runBlocking { LocalDriverRepository(compose.activity).reset() }
+    private lateinit var scenario: ActivityScenario<MainActivity>
+    @Before fun resetDemo() {
+        runBlocking { LocalDriverRepository(InstrumentationRegistry.getInstrumentation().targetContext).reset() }
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        scenario.onActivity { activity -> activity.setContent { DriverTheme { DriverApp() } } }
+    }
+    @After fun close() { scenario.close() }
 
     private fun awaitText(text: String) {
         compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
@@ -28,7 +40,8 @@ class DeliveryFlowTest {
         awaitText("Iniciar entrega")
         compose.onNodeWithText("Iniciar entrega").performClick()
         awaitText("Confirmar entrega")
-        compose.activityRule.scenario.recreate()
+        scenario.recreate()
+        scenario.onActivity { activity -> activity.setContent { DriverTheme { DriverApp() } } }
         awaitText("Confirmar entrega")
         compose.onNodeWithText("Confirmar entrega").performClick()
         compose.onNodeWithText("Registrar entrega").assertIsNotEnabled()

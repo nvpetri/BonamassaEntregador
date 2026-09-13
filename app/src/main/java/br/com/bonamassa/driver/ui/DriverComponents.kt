@@ -25,7 +25,7 @@ import br.com.bonamassa.core.delivery.*
 import br.com.bonamassa.driver.R
 
 @Composable
-fun BrandHeader(title: String? = null, onBack: (() -> Unit)? = null) {
+fun BrandHeader(title: String? = null, onBack: (() -> Unit)? = null, demo: Boolean = true) {
     Column(Modifier.fillMaxWidth().background(Brand.Background).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack == null) Image(painterResource(R.drawable.bonamassa_logo), "Bonamassa Pizzaria", Modifier.size(52.dp).clip(CircleShape))
@@ -36,7 +36,7 @@ fun BrandHeader(title: String? = null, onBack: (() -> Unit)? = null) {
             }
             Icon(Icons.Default.DeliveryDining, null, tint = Brand.Gold, modifier = Modifier.padding(8.dp).size(28.dp))
         }
-        Box(Modifier.fillMaxWidth().background(Brand.Gold.copy(alpha = .10f)).padding(horizontal = 14.dp, vertical = 7.dp)) {
+        if (demo) Box(Modifier.fillMaxWidth().background(Brand.Gold.copy(alpha = .10f)).padding(horizontal = 14.dp, vertical = 7.dp)) {
             Text("DEMONSTRAÇÃO · ENTREGAS DE EXEMPLO", style = MaterialTheme.typography.labelSmall, color = Brand.Gold)
         }
     }

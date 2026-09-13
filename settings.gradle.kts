@@ -21,5 +21,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BonamassaEntregador"
-include(":core")
+include(":core", ":client")
 if (!providers.gradleProperty("coreOnly").isPresent) include(":app")

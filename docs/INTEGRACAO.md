@@ -1,54 +1,42 @@
-# Integração do entregador
+# Integração com APIBonamassa
 
-Este repositório contém apenas o Android do motoboy e seu módulo de regras JVM. O aplicativo cliente está em outro repositório. Nenhum arquivo, banco local ou processo é compartilhado entre os dois apps.
+Cliente compatível com o contrato da API em `c9fcefad3827343a27abd5b0d14970a935b182b5`. Nenhuma alteração no backend é necessária para esta integração.
 
-## Fronteira desta demonstração
-
-`LocalDriverRepository` grava o estado em DataStore com um codec JSON de schema 1. As três entregas vêm de `DriverDemo`; a disponibilidade e os eventos não são enviados ao restaurante. `DriverRepository` define a entrada de persistência, mas a interface atual de transformação local deve ser substituída por comandos autenticados ao introduzir uma API.
-
-O app não solicita permissões de Internet, chamada telefônica ou localização. Os mapas abrem por ação do usuário em outro aplicativo ou navegador. O discador usa `ACTION_DIAL`, que permite ao usuário decidir se inicia a chamada; os fixtures não contêm telefones reais.
-
-## Fluxo implementado
-
-| Etapa | Próxima ação permitida |
+| Operação | Endpoint |
 |---|---|
-| A retirar | Confirmar retirada estando disponível para coletas |
-| Retirado | Iniciar entrega |
-| Em rota | Confirmar entrega ou registrar tentativa sem sucesso |
-| Retornar à pizzaria | Confirmar devolução |
-| Entregue / Devolvido | Consultar o histórico |
+| Entrar / sair | `POST /v1/sessions`, `DELETE /v1/sessions/current` |
+| Perfil e disponibilidade atual | `GET /v1/me` |
+| Alterar disponibilidade | `PATCH /v1/driver/availability` |
+| Lista paginada / detalhe | `GET /v1/driver/deliveries`, `GET /v1/driver/deliveries/{id}` |
+| Retirar / iniciar | `POST /v1/driver/deliveries/{id}/collect`, `.../start` |
+| Concluir / tentativa sem sucesso / devolver | `POST .../complete`, `.../issue`, `.../return` |
 
-Ao pausar novas coletas, pedidos já retirados podem ser iniciados e concluídos. Vários pedidos podem ficar em rota simultaneamente. Conclusões duplicadas e saltos de etapa são rejeitados. Uma devolução não conta como entrega concluída nem soma taxa nesta demonstração; essa regra comercial precisa ser aprovada.
+Toda alteração operacional carrega `expectedVersion` e `Idempotency-Key`. O cliente não envia total, taxa, identidade de outro entregador ou alterações arbitrárias de status. A API valida papel, loja, atribuição e transição. Disponibilidade retorna apenas `id`, `available` e `version`; o perfil completo vem de `/v1/me`.
 
-Para dinheiro e cartão, o entregador deve confirmar o recebimento e informar o destinatário. `paymentCollected` é um registro operacional local, não uma comprovação de transação financeira. No pagamento antecipado, `PREPAID` representa uma informação que deverá vir do servidor.
+## Etapas
 
-## Contrato sugerido para o backend
-
-| Operação | Proposta |
+| Estado recebido | Ação |
 |---|---|
-| Autenticação do entregador | Sessão criada pelo servidor e associada ao estabelecimento |
-| Listar atribuídas | `GET /driver/deliveries` |
-| Detalhar uma entrega autorizada | `GET /driver/deliveries/{id}` |
-| Atualizar disponibilidade | `PATCH /driver/availability` |
-| Registrar retirada | `POST /driver/deliveries/{id}/collect` |
-| Iniciar percurso | `POST /driver/deliveries/{id}/start` |
-| Registrar entrega | `POST /driver/deliveries/{id}/complete` |
-| Registrar tentativa sem sucesso | `POST /driver/deliveries/{id}/issue` |
-| Confirmar devolução | `POST /driver/deliveries/{id}/return` |
+| `READY` + `ASSIGNED` | Retirar, estando disponível |
+| `READY` + `COLLECTED` | Iniciar entrega |
+| `OUT_FOR_DELIVERY` + `ON_ROUTE` | Concluir ou registrar tentativa sem sucesso |
+| `RETURNING` + `RETURNING` | Confirmar devolução física à pizzaria |
+| `DELIVERED` / `RETURNED` / `CANCELLED` | Consulta |
 
-Cada comando deverá carregar um identificador de idempotência e a versão conhecida da entrega. O servidor precisa conferir estabelecimento, entregador atribuído, versão e transição permitida antes de gravar o evento. Valores, pagamento antecipado e permissões são validados no servidor. Após o aceite, a resposta canônica atualiza o app e o painel da pizzaria; alterações simultâneas precisam de reconciliação, inclusive cancelamentos e reatribuições.
+A conclusão exige nome do recebedor. Quando `paymentRecorded=false` e `total>0`, exige confirmação explícita de pagamento. Um pagamento já registrado pela pizzaria não é cobrado novamente. Devoluções não somam taxa de entrega concluída, conforme a regra atual do backend.
 
-Para uso com conexão instável, implementar uma fila de comandos pendentes e indicar quais ações ainda não foram confirmadas pelo servidor. O DataStore atual não é uma fila de sincronização. Tokens, dados reais de clientes e políticas de retenção ainda precisam de implementação antes de substituir os exemplos.
+## Falhas e reconciliação
 
-## A desenvolver para operação real
+`client/` contém contrato, modelos, validações e codec sem dependências Android. `app/connected/` gerencia a sessão e as telas. Os arquivos do modo demo permanecem separados.
 
-- Autenticação, atribuição dos pedidos pelo painel e revogação de acesso.
-- API, envio e recebimento de eventos, reconexão e atualização do histórico entre aparelhos.
-- Notificações de novas entregas.
-- Endereço real da pizzaria e contato com a equipe.
-- Confirmação de pagamento pelo sistema responsável e política de prestação de contas.
-- Rastreamento, se contratado: consentimento, permissões, serviço em primeiro plano, limites de atualização e controle de acesso à localização.
-- Tratamento de cancelamentos/reentregas e aprovação das regras comerciais.
-- Testes em aparelhos, distribuição do APK e assinatura de produção sob controle do proprietário.
+`SecureStore` grava uma transação AES-256-GCM em `noBackupFilesDir` usando chave Android Keystore e `AtomicFile`. O comando pendente é vinculado à origem, loja e usuário; método PATCH/POST, corpo e chave permanecem idênticos em todas as tentativas. A senha não é persistida.
 
-Mapas usam links externos; não há mapa embutido, cálculo de distância ou ETA no aplicativo. O endereço é codificado como parâmetro e não vira uma URL arbitrária. Referências: [Maps URLs](https://developers.google.com/maps/documentation/urls/get-started), [Waze Deep Links](https://developers.google.com/waze/deeplinks) e [intents Android](https://developer.android.com/training/basics/intents/sending).
+A aplicação não confirma a ação localmente antes da resposta. Falhas de transporte, 408, 429, 5xx, resposta inválida e conflito de chave preservam o envio. Uma rejeição definitiva de negócio libera o comando e exige atualização antes de outra ação. Uma sessão expirada preserva o envio para retomar após login na mesma conta. Dados locais ilegíveis apresentam erro, sem reset silencioso.
+
+Uma resposta de idempotência pode ser antiga. A tela combina versões monotonicamente e busca novamente o estado canônico antes de habilitar novos comandos. O refresh percorre todas as páginas de estados ativos; a primeira página do histórico não pode esconder uma atribuição antiga. Pedidos antes conhecidos são verificados individualmente para detectar conclusão, reatribuição ou cancelamento. Um 404 remove o pedido e fecha seus detalhes.
+
+Polling funciona com a tela visível (5s; 15s após erro), sem simular GPS/ETA. O histórico é paginado; as taxas exibidas são a soma dos registros carregados. Rotas usam o endereço textual da API e abrem aplicações externas, sem chave de mapas. Ao retornar, a tela orienta entregar o pedido à equipe; a API atual não fornece endereço da loja para navegação de retorno.
+
+## Próximas integrações
+
+Push, rastreamento em segundo plano, endereço/contato da loja, fechamento de turno e repasses dependem de novos contratos e requisitos. A conta de entregador é criada pela gerência no painel; não existe cadastro público que promova um cliente a funcionário.

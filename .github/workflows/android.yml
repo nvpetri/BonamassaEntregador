@@ -1,0 +1,99 @@
+name: Entregador integrado
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: bonamassa
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: bonamassa_driver_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bonamassa -d bonamassa_driver_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://bonamassa:ci-only-password@localhost:5432/bonamassa_driver_test
+      SEED_STORE_SLUG: bonamassa
+      SEED_MANAGER_EMAIL: manager@teste.example
+      SEED_MANAGER_PASSWORD: Manager-ci-only-password-2026
+      SEED_DEMO: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      - name: Compilar, testar e analisar Android
+        run: bash gradlew :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bonamassa-entregador-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - uses: actions/checkout@v7
+        with:
+          repository: nvpetri/APIBonamassa
+          ref: c9fcefad3827343a27abd5b0d14970a935b182b5
+          path: _api
+          persist-credentials: false
+      - run: npm ci
+        working-directory: _api
+      - run: npm run db:migrate && npm run build && npm run db:seed
+        working-directory: _api
+      - name: Iniciar API de teste
+        working-directory: _api
+        run: |
+          NODE_ENV=test npm start > "$RUNNER_TEMP/api.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3001/v1/health; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/api.log"
+          exit 1
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: bash scripts/test-device.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verificacao-android
+          path: |
+            app/build/reports/
+            core/build/reports/
+            client/build/reports/
+            app/build/outputs/androidTest-results/
+            device-screenshots/
+            ${{ runner.temp }}/api.log
+          retention-days: 7
