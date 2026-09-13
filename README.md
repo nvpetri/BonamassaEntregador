@@ -4,16 +4,16 @@ App Android do motoboy conectado à [APIBonamassa](https://github.com/nvpetri/AP
 
 ## Testar com a pizzaria
 
-1. Atualize e inicie a API na porta 3001. O painel deve apontar para essa mesma API e loja.
+1. Confirme que a API hospedada e a loja estão abertas no painel.
 2. No painel, cadastre uma conta de funcionário com perfil **Entregador**, e-mail e senha. Contas de cliente/gerência não entram neste app.
 3. Abra este projeto no Android Studio. Selecione um **JDK completo 17 ou 21**, SDK Android 35 e execute **Sync Project with Gradle Files**.
-4. Execute `app` em aparelho Android 8.0 ou superior. Na tela de acesso, toque em **Configurar API** e informe `http://IP-DO-PC:3001` e o identificador da loja, normalmente `bonamassa`. No emulador Android Studio, use `http://10.0.2.2:3001`.
+4. Execute `app` em aparelho Android 8.0 ou superior. O aplicativo já abre conectado a `https://bonamassa-api.onrender.com`, na loja `bonamassa`; não há configuração de servidor na interface.
 5. Entre com a conta do entregador e ative **Disponível para coletas**.
 6. Faça um pedido de entrega pelo app cliente. No painel, aceite, prepare, marque como pronto e atribua ao entregador.
 7. No app de entregas: **Confirmar retirada → Retirei o pedido → Iniciar entrega → Sair para entrega**. Abra Maps/Waze se precisar de navegação.
 8. Em **Confirmar entrega**, informe quem recebeu e confirme o recebimento do dinheiro/cartão quando solicitado. A conclusão aparecerá no painel e no app cliente.
 
-O celular e o PC precisam estar na mesma rede. A API deve escutar em `0.0.0.0` e a porta 3001 deve estar liberada no firewall da rede privada. `localhost` no celular aponta para o próprio celular.
+Se a primeira conexão demorar, abra `https://bonamassa-api.onrender.com/v1/health` no navegador. A instância gratuita pode levar alguns segundos para despertar após um período sem uso.
 
 ## Operação conectada
 
@@ -55,12 +55,12 @@ A demonstração antiga continua disponível explicitamente com `-PbonamassaDemo
 
 ## Distribuição
 
-HTTP e configuração de servidor pela tela estão disponíveis apenas em debug, para testes na rede local. Release exige HTTPS e recebe o servidor na compilação:
+O servidor padrão fica em `gradle.properties` e não pode ser alterado pela interface. Para substituir o destino em uma compilação isolada de desenvolvimento ou teste:
 
 ```bash
-bash gradlew :app:assembleRelease -PbonamassaApiUrl=https://api.seudominio.com.br -PbonamassaStoreSlug=bonamassa
+bash gradlew :app:assembleDebug -PbonamassaApiUrl=http://10.0.2.2:3001 -PbonamassaStoreSlug=bonamassa
 ```
 
-A assinatura de produção deve ser configurada pelo proprietário. Esta versão não implementa notificações push, rastreamento GPS em segundo plano ou prestação de contas/repasse. Maps e Waze são abertos por toque do usuário; o app não solicita localização nem permissão para fazer chamadas.
+Release continua exigindo HTTPS. Ao atualizar uma instalação antiga, o aplicativo migra para o servidor configurado no build quando não há comando pendente. A assinatura de produção deve ser configurada pelo proprietário. Esta versão não implementa notificações push, rastreamento GPS em segundo plano ou prestação de contas/repasse. Maps e Waze são abertos por toque do usuário; o app não solicita localização nem permissão para fazer chamadas.
 
 Detalhes: [integração](docs/INTEGRACAO.md) e [verificação](docs/VERIFICACAO.md).

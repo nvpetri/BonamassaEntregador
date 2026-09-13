@@ -45,14 +45,12 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
         }
     }
     var tab by rememberSaveable { mutableStateOf(0) }
-    var config by rememberSaveable { mutableStateOf(false) }
     var command by remember { mutableStateOf<Command?>(null) }
     val delivery = ui.deliveries.find { it.id == ui.selected }
     LaunchedEffect(ui.selected, delivery?.version, ui.saved.session?.accessToken) { command = null }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(ui.error) { ui.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     BackHandler(ui.selected != null) { vm.select(null) }
-    if (config && BuildConfig.DEBUG) ConnectionDialog(ui, { config = false }) { url, slug -> vm.configure(url, slug); config = false }
     if (delivery != null && command != null) key(delivery.id, command) {
         CommandDialog(delivery, requireNotNull(command), ui.canWrite, { command = null }) { name, paid, reason ->
             vm.command(delivery, requireNotNull(command), name, paid, reason); command = null
@@ -111,7 +109,7 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
                     PrimaryAction("Tentar novamente", Modifier.fillMaxWidth(), !ui.busy) { vm.load() }
                 }
                 !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                ui.saved.session == null -> LoginScreen(ui, vm::signIn, { config = true })
+                ui.saved.session == null -> LoginScreen(ui, vm::signIn)
                 ui.selected != null && delivery != null -> DeliveryScreen(delivery, vm::message)
                 tab == 0 -> QueueScreen(ui, vm::available, vm::select, vm::refresh)
                 tab == 1 -> HistoryScreen(ui, vm::select, vm::more)
@@ -122,7 +120,7 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
 }
 
 @Composable
-private fun LoginScreen(ui: DriverUi, signIn: (String, String) -> Unit, configure: () -> Unit) {
+private fun LoginScreen(ui: DriverUi, signIn: (String, String) -> Unit) {
     var email by rememberSaveable(ui.saved.account?.email) { mutableStateOf(ui.saved.account?.email.orEmpty()) }
     // Password is intentionally never saved in the instance bundle or on disk.
     var password by remember { mutableStateOf("") }
@@ -137,10 +135,6 @@ private fun LoginScreen(ui: DriverUi, signIn: (String, String) -> Unit, configur
             PrimaryAction("Entrar nas entregas", Modifier.fillMaxWidth(), !ui.busy && email.isNotBlank() && password.isNotEmpty(), Icons.Default.Login) { signIn(email, password) }
         }
         Text("Ainda não tem acesso? Peça ao responsável para cadastrar seu perfil de entregador no painel.", style = MaterialTheme.typography.bodyMedium, color = Brand.Muted)
-        if (BuildConfig.DEBUG) {
-            Text("Servidor: ${ui.saved.origin}\nLoja: ${ui.saved.slug}", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
-            OutlinedButton(configure, enabled = !ui.busy && ui.saved.pending == null, modifier = Modifier.fillMaxWidth()) { Text("Configurar API") }
-        }
     }
 }
 
@@ -255,24 +249,6 @@ private fun ProfileScreen(ui: DriverUi, logout: () -> Unit) {
 private fun Input(label: String, value: String, change: (String) -> Unit, enabled: Boolean = true, keyboard: KeyboardType = KeyboardType.Text) {
     OutlinedTextField(value, change, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true, enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = keyboard))
 }
-@Composable
-private fun ConnectionDialog(ui: DriverUi, dismiss: () -> Unit, save: (String, String) -> Unit) {
-    var url by remember { mutableStateOf(ui.saved.origin) }
-    var slug by remember { mutableStateOf(ui.saved.slug) }
-    var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = dismiss, title = { Text("Configurar API") }, text = {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("No celular, use o IPv4 do PC e a porta da API. Ex.: http://192.168.1.10:3001")
-            Input("URL da API", url, { url = it }, keyboard = KeyboardType.Uri)
-            Input("Identificador da loja", slug, { slug = it })
-            error?.let { Text(it, color = Brand.Red) }
-        }
-    }, confirmButton = { TextButton({
-        try { val endpoint = Endpoint.parse(url, slug, true); save(endpoint.origin, endpoint.storeSlug) }
-        catch (e: IllegalArgumentException) { error = e.message }
-    }, enabled = !ui.busy && ui.saved.pending == null) { Text("Salvar conexão") } }, dismissButton = { TextButton(dismiss) { Text("Voltar") } })
-}
-
 private fun date(iso: String) = runCatching { timestamp(Instant.parse(iso).toEpochMilli()) }.getOrDefault(iso)
 
 @Composable

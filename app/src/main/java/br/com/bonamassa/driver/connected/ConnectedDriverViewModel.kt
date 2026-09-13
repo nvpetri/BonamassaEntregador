@@ -39,8 +39,19 @@ class ConnectedDriverViewModel(application: Application) : AndroidViewModel(appl
         _ui.update { it.copy(busy = true) }
         viewModelScope.launch {
             try {
-                val saved = withContext(Dispatchers.IO) { store.read() } ?: SavedState(
-                    origin = BuildConfig.API_URL.ifBlank { if (BuildConfig.DEBUG) "http://10.0.2.2:3001" else "" }, slug = BuildConfig.STORE_SLUG)
+                val configured = Endpoint.parse(
+                    BuildConfig.API_URL.ifBlank { if (BuildConfig.DEBUG) "http://10.0.2.2:3001" else "" },
+                    BuildConfig.STORE_SLUG,
+                    BuildConfig.DEBUG
+                )
+                val stored = withContext(Dispatchers.IO) { store.read() }
+                val saved = when {
+                    stored == null -> SavedState(origin = configured.origin, slug = configured.storeSlug)
+                    stored.origin == configured.origin && stored.slug == configured.storeSlug -> stored
+                    stored.pending != null -> stored
+                    else -> SavedState(origin = configured.origin, slug = configured.storeSlug)
+                }
+                if (saved !== stored) withContext(Dispatchers.IO) { store.write(saved) }
                 _ui.update { it.copy(saved = saved, loaded = true, busy = false, fatal = false) }
                 refresh()
             } catch (e: CancellationException) { throw e }
@@ -84,12 +95,6 @@ class ConnectedDriverViewModel(application: Application) : AndroidViewModel(appl
     }
     private fun editable() { require(_ui.value.saved.pending == null) { "Verifique o envio pendente antes de fazer outra alteração ou sair." } }
     private fun session() = requireNotNull(_ui.value.saved.session) { "Entre com sua conta de entregador." }
-    fun configure(origin: String, slug: String) = action {
-        check(BuildConfig.DEBUG); editable()
-        require(_ui.value.saved.session == null) { "Saia da conta antes de trocar de servidor." }
-        val next = Endpoint.parse(origin, slug, true)
-        change { SavedState(origin = next.origin, slug = next.storeSlug) }; resetData()
-    }
     fun signIn(email: String, password: String) = action {
         require(email.trim().isNotBlank() && password.isNotEmpty()) { "Informe e-mail e senha." }
         val client = api()

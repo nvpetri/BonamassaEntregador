@@ -73,7 +73,6 @@ class DriverApiFlowTest {
         secure.write(SavedState(origin = endpoint.origin, slug = "bonamassa"))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             waitText("Entrar nas entregas")
-            click("Configurar API"); input("URL da API", endpoint.origin); click("Salvar conexão")
             input("E-mail", driver.email); input("Senha", password); click("Entrar nas entregas")
             waitText("Novas coletas pausadas"); waitAvailable()
             compose.onNodeWithTag("availability").performClick()
