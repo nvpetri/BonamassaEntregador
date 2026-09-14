@@ -11,12 +11,16 @@ android {
         applicationId = "br.com.bonamassa.driver"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-demo"
+        versionCode = 3
+        versionName = "0.3.0"
+        buildConfigField("String", "API_URL", "\"${providers.gradleProperty("bonamassaApiUrl").orElse("").get()}\"")
+        buildConfigField("String", "STORE_SLUG", "\"${providers.gradleProperty("bonamassaStoreSlug").orElse("bonamassa").get()}\"")
+        buildConfigField("boolean", "DEMO_MODE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     buildTypes {
+        debug { buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("bonamassaDemo").orElse("false").get()) }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -32,6 +36,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":client"))
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.1")

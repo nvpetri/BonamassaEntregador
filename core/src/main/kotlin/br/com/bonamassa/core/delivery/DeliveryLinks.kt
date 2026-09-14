@@ -4,7 +4,7 @@ import java.net.URLEncoder
 
 object DeliveryLinks {
     private fun encoded(address: String): String {
-        require(address.isNotBlank() && address.length <= 300)
+        require(address.isNotBlank() && address.length <= 1000)
         return URLEncoder.encode(address, "UTF-8")
     }
     fun googleMaps(address: String) = "https://www.google.com/maps/dir/?api=1&destination=${encoded(address)}&travelmode=driving"

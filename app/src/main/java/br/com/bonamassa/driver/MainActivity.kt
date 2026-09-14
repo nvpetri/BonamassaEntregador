@@ -15,6 +15,6 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
-        setContent { DriverTheme { DriverApp() } }
+        setContent { DriverTheme { if (BuildConfig.DEMO_MODE) DriverApp() else br.com.bonamassa.driver.connected.ConnectedDriverApp() } }
     }
 }

@@ -1,90 +1,66 @@
-# BonamassaEntregador
+# Bonamassa Entregador
 
-App Android **Bonamassa Entregas**, em Kotlin e Jetpack Compose, com a identidade da pizzaria em preto, vermelho e dourado.
+App Android do motoboy conectado à [APIBonamassa](https://github.com/nvpetri/APIBonamassa), com a identidade Bonamassa em preto, vermelho e dourado. Projeto independente do app do cliente; os dois podem ser instalados juntos.
 
-Projeto independente de `BonamassaAndroid`. Tem seu próprio APK, armazenamento e identificador `br.com.bonamassa.driver`; os dois apps podem ficar instalados no mesmo aparelho.
+## Testar com a pizzaria
 
-**Versão 0.1.0-demo: pedidos fictícios e registros locais. Não recebe despachos da pizzaria, não realiza cobranças e não rastreia localização.**
+1. Confirme que a API hospedada e a loja estão abertas no painel.
+2. No painel, cadastre uma conta de funcionário com perfil **Entregador**, e-mail e senha. Contas de cliente/gerência não entram neste app.
+3. Abra este projeto no Android Studio. Selecione um **JDK completo 17 ou 21**, SDK Android 35 e execute **Sync Project with Gradle Files**.
+4. Execute `app` em aparelho Android 8.0 ou superior. O aplicativo já abre conectado a `https://bonamassa-api.onrender.com`, na loja `bonamassa`; não há configuração de servidor na interface.
+5. Entre com a conta do entregador e ative **Disponível para coletas**.
+6. Faça um pedido de entrega pelo app cliente. No painel, aceite, prepare, marque como pronto e atribua ao entregador.
+7. No app de entregas: **Confirmar retirada → Retirei o pedido → Iniciar entrega → Sair para entrega**. Abra Maps/Waze se precisar de navegação.
+8. Em **Confirmar entrega**, informe quem recebeu e confirme o recebimento do dinheiro/cartão quando solicitado. A conclusão aparecerá no painel e no app cliente.
 
-## O que já funciona
+Se a primeira conexão demorar, abra `https://bonamassa-api.onrender.com/v1/health` no navegador. A instância gratuita pode levar alguns segundos para despertar após um período sem uso.
 
-- Fila de entregas com filtros de coletas e pedidos em rota.
-- Disponibilidade para novas coletas; pausar não impede concluir pedidos já retirados.
-- Detalhes do pedido, itens, observações, destino e referência.
-- Confirmação de retirada e início de entrega; é possível sair com mais de um pedido.
-- Abertura de destino no Google Maps ou Waze e cópia do endereço.
-- Abertura do discador se houver telefone válido. Os exemplos não contêm números de clientes.
-- Valor a cobrar, pagamento antecipado, dinheiro, cartão e troco.
-- Conclusão com nome do recebedor e confirmação obrigatória para dinheiro/cartão.
-- Tentativa sem sucesso, motivo e observação, com etapa própria de devolução à pizzaria.
-- Histórico com etapas e horários, taxas de entregas concluídas e dinheiro recebido separados.
-- Nome do entregador e reinício da demonstração com confirmação.
-- Persistência em DataStore; uma leitura inválida mostra erro e preserva os dados para tentar novamente.
+## Operação conectada
 
-Os destinos são exemplos em locais públicos de São Paulo. Antes de abrir a navegação, o app identifica o destino como demonstrativo. Nenhum pedido se refere a uma pessoa real. O campo de disponibilidade também é local.
+- Login exclusivo de entregador, sessão protegida no Android Keystore e saída da conta.
+- Disponibilidade compartilhada com o painel. Pausar novas coletas mantém as operações de pedidos já retirados.
+- Fila, filtros, detalhes, itens de combos, observações, telefone, endereço e referência vindos da API.
+- Retirada, início, entrega, tentativa sem sucesso com motivo e devolução à pizzaria.
+- Total, forma de pagamento, troco, taxa prevista e taxa registrada informados pelo servidor. Recebimento é um registro operacional, sem cobrança por gateway.
+- Histórico paginado. A soma de taxas considera somente o histórico carregado e não representa confirmação de repasse.
+- Atualização a cada 5 segundos com o app visível, com intervalo maior após falha. Reatribuições e cancelamentos removem pedidos que deixaram de pertencer à conta.
+- Envio persistido antes da requisição: **Verificar envio** repete a mesma chave, corpo, método e versão. Fechar o app não descarta uma confirmação pendente.
+- Sessão expirada exige novo login na conta original quando há envio pendente. Trocar de servidor ou sair fica bloqueado até resolver esse envio.
 
-## Abrir no Android Studio
+Não há avanço automático de status nem fallback para pedidos fictícios quando a conexão falha. Endereços e histórico ficam em memória; sessão e comando pendente ficam criptografados e excluídos de backups.
 
-1. Clone `https://github.com/nvpetri/BonamassaEntregador.git` e abra a raiz do projeto em **File → Open**.
-2. Em **Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK**, escolha um **JDK completo 17 ou 21**. O projeto mantém bytecode Java 17, inclusive usando JDK 21.
-3. No SDK Manager, instale **Android SDK Platform 35**, **Build Tools 35.0.0** e Platform Tools.
-4. Clique em **Sync Project with Gradle Files**. A primeira execução precisa baixar dependências.
-5. Selecione a configuração `app` e um aparelho/emulador Android 8.0 (API 26) ou superior, depois clique em **Run**.
+## Compilar
 
-O aplicativo instalado se chama **Bonamassa Entregas**. O arquivo `local.properties`, caso gerado pelo Android Studio, deve ficar somente no seu computador.
-
-### Compilar e testar
-
-No Windows, na raiz do projeto:
+Windows:
 
 ```powershell
-.\gradlew.bat :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+.\gradlew.bat :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-No Linux/macOS:
+Linux/macOS:
 
 ```bash
-./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+bash gradlew :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Se a compilação terminar, o APK estará em `app/build/outputs/apk/debug/app-debug.apk`.
+APK: `app/build/outputs/apk/debug/app-debug.apk`. O workflow do GitHub Actions também disponibiliza o APK de teste e relatórios.
 
-Somente as regras, sem SDK Android:
+Somente regras/contratos JVM, sem configurar Android:
 
-```powershell
-.\gradlew.bat -PcoreOnly :core:test
+```bash
+bash gradlew -PcoreOnly :core:test :client:test
 ```
 
-O teste de interface precisa de aparelho ou emulador e **reinicia os dados da demonstração**:
+A demonstração antiga continua disponível explicitamente com `-PbonamassaDemo=true` em build debug; seus dados são separados dos dados conectados. O build padrão usa a API.
 
-```powershell
-.\gradlew.bat :app:connectedDebugAndroidTest
+## Distribuição
+
+O servidor padrão fica em `gradle.properties` e não pode ser alterado pela interface. Para substituir o destino em uma compilação isolada de desenvolvimento ou teste:
+
+```bash
+bash gradlew :app:assembleDebug -PbonamassaApiUrl=http://10.0.2.2:3001 -PbonamassaStoreSlug=bonamassa
 ```
 
-Use o mesmo JDK em `JAVA_HOME` e no Gradle JDK do Android Studio. Se trocar de JDK no terminal, execute `.\gradlew.bat --stop` antes de compilar novamente.
+Release continua exigindo HTTPS. Ao atualizar uma instalação antiga, o aplicativo migra para o servidor configurado no build quando não há comando pendente. A assinatura de produção deve ser configurada pelo proprietário. Esta versão não implementa notificações push, rastreamento GPS em segundo plano ou prestação de contas/repasse. Maps e Waze são abertos por toque do usuário; o app não solicita localização nem permissão para fazer chamadas.
 
-## Roteiro de apresentação
-
-1. Abra o pedido **#1043**, pago em dinheiro. Confira os R$ 90,00 a cobrar e R$ 10,00 de troco para R$ 100,00.
-2. Toque em **Confirmar retirada → Retirei o pedido → Iniciar entrega**.
-3. Abra **Abrir rota** para escolher Google Maps ou Waze. O destino é um exemplo.
-4. Feche e reabra o aplicativo: a etapa continua salva.
-5. Em **Confirmar entrega**, informe quem recebeu. Sem marcar o recebimento do pagamento, a confirmação permanece bloqueada.
-6. Registre a entrega e confira o histórico: taxa de R$ 8,00 e dinheiro recebido de R$ 90,00 são mostrados separadamente.
-7. Use o pedido **#1042** para demonstrar uma tentativa sem sucesso: retire, inicie, toque em **Não consegui entregar**, escolha um motivo e depois confirme a devolução.
-8. Em **Perfil**, reinicie a demonstração para restaurar os três pedidos.
-
-## Organização
-
-| Parte | Local |
-|---|---|
-| Modelos e regras de entrega | `core/src/main/kotlin/br/com/bonamassa/core/delivery/` |
-| Pedidos de exemplo | `core/src/main/kotlin/br/com/bonamassa/core/delivery/DriverDemo.kt` |
-| Telas e tema Bonamassa | `app/src/main/java/br/com/bonamassa/driver/ui/` |
-| Estado, ações e tratamento de erros | `app/src/main/java/br/com/bonamassa/driver/DriverViewModel.kt` |
-| DataStore e codec JSON versionado | `app/src/main/java/br/com/bonamassa/driver/data/` |
-| Abertura de mapas e discador | `app/src/main/java/br/com/bonamassa/driver/ExternalActions.kt` |
-
-As regras de valores, taxas e operação são exemplos para aprovação da pizzaria. A logo foi fornecida pelo usuário; os direitos da marca permanecem com seus titulares.
-
-Consulte [o plano de integração](docs/INTEGRACAO.md) e [o registro de verificação](docs/VERIFICACAO.md) para os limites da versão.
+Detalhes: [integração](docs/INTEGRACAO.md) e [verificação](docs/VERIFICACAO.md).
