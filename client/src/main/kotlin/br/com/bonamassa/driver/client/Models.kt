@@ -10,7 +10,8 @@ private fun <T> JSONArray.objects(read: (JSONObject) -> T): List<T> = (0 until l
 data class User(val id: String, val storeId: String, val name: String, val email: String, val phone: String,
     val role: String, val enabled: Boolean, val available: Boolean, val version: Int)
 data class Session(val accessToken: String, val expiresAt: String, val user: User)
-data class Address(val street: String, val number: String, val neighborhood: String, val city: String, val state: String, val postalCode: String, val reference: String) {
+data class Address(val street: String, val number: String, val neighborhood: String, val city: String, val state: String, val postalCode: String, val reference: String,
+    val complement: String = "", val noComplement: Boolean = false) {
     val route get() = "$street, $number, $neighborhood, $city - $state, $postalCode, Brasil"
 }
 data class Item(val name: String, val detail: String, val note: String, val quantity: Int, val components: List<Item> = emptyList())
@@ -51,7 +52,7 @@ object Decode {
         val customer = j.getJSONObject("customer")
         return Delivery(j.getString("id"), j.getInt("number"), j.getInt("version"), j.getString("status"), j.textOrNull("deliveryStatus"),
             customer.getString("name"), customer.getString("phone"), j.optJSONObject("address")?.let {
-                Address(it.getString("street"), it.getString("number"), it.getString("neighborhood"), it.getString("city"), it.getString("state"), it.getString("postalCode"), it.optString("reference", ""))
+                Address(it.getString("street"), it.getString("number"), it.getString("neighborhood"), it.getString("city"), it.getString("state"), it.getString("postalCode"), it.optString("reference", ""), it.optString("complement", ""), it.optBoolean("noComplement", false))
             }, j.optString("note", ""), j.getJSONArray("items").objects(::item), j.getString("payment"), j.getBoolean("paymentRecorded"),
             if (j.isNull("cashTendered")) null else j.getLong("cashTendered"), j.getLong("change"), j.getLong("total"), j.getLong("driverFee"), j.getLong("driverEarnings"),
             j.textOrNull("recipient"), j.getString("createdAt"), j.getString("updatedAt"), j.getJSONArray("events").objects { Event(it.getString("action"), it.getInt("version"), it.getString("createdAt")) })

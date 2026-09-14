@@ -20,6 +20,9 @@ object ExternalActions {
     fun route(context: Context, address: String, waze: Boolean, onError: (String) -> Unit) =
         launch(context, Intent(Intent.ACTION_VIEW, Uri.parse(if (waze) DeliveryLinks.waze(address) else DeliveryLinks.googleMaps(address))), onError)
 
+    fun routeLeg(context: Context, leg: br.com.bonamassa.driver.client.RouteLeg, onError: (String) -> Unit) =
+        launch(context, Intent(Intent.ACTION_VIEW, Uri.parse(leg.url)), onError)
+
     fun dial(context: Context, phone: String, onError: (String) -> Unit) {
         val number = DeliveryLinks.dialNumber(phone)
         if (number == null) { onError("Telefone não informado ou inválido."); return }

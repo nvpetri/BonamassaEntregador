@@ -125,6 +125,14 @@ class ConnectedDriverViewModel(application: Application) : AndroidViewModel(appl
         sendPending()
     }
     fun retryPending() = action { sendPending() }
+    fun startRoute(deliveries: List<Delivery>) = action {
+        editable()
+        require(_ui.value.updatedAt != null && _ui.value.syncError == null) { "Atualize as entregas antes de continuar." }
+        require(deliveries.all { selected -> _ui.value.deliveries.any { it.id == selected.id && it.version == selected.version && it.canStartRoute } }) { "A lista mudou. Confira os pedidos novamente." }
+        val pending = Pending.route(deliveries, endpoint(), session().user)
+        change { it.copy(pending = pending) }
+        sendPending()
+    }
     private suspend fun sendPending() {
         val pending = requireNotNull(_ui.value.saved.pending); val auth = session(); val client = api()
         require(pending.belongsTo(client.endpoint, auth.user)) { "Entre na conta original para verificar o envio." }
@@ -138,6 +146,12 @@ class ConnectedDriverViewModel(application: Application) : AndroidViewModel(appl
                     val user = if (version >= current.user.version) current.user.copy(version = version, available = available) else current.user
                     saved.copy(session = current.copy(user = user), account = user, pending = null)
                 }
+            } else if (pending.startsRoute) {
+                val items = response.getJSONArray("items")
+                val result = (0 until items.length()).map { Decode.delivery(items.getJSONObject(it)) }
+                require(result.map { it.id }.toSet() == pending.routeIds.toSet() && result.size == pending.routeIds.size)
+                change { it.copy(pending = null) }
+                merge(result)
             } else {
                 val result = Decode.delivery(response)
                 require(result.id == pending.deliveryId)

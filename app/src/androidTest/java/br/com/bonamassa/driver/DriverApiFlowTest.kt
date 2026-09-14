@@ -46,20 +46,24 @@ class DriverApiFlowTest {
     private fun createDriver(manager: Session, name: String): User = Decode.user(api.request("POST", "/v1/staff/users", manager.accessToken,
         objectOf("email" to "driver-${key()}@teste.example", "password" to password, "name" to name, "phone" to "11922223333", "role" to "DRIVER"), key()))
     private fun staff(order: JSONObject, action: String, manager: Session, extra: JSONObject = JSONObject()): JSONObject = api.request("POST", "/v1/staff/orders/${order.getString("id")}/$action", manager.accessToken, extra.put("expectedVersion", order.getInt("version")), key())
-    private fun order(manager: Session, driver: User, payment: String = "CASH"): JSONObject {
+    private fun order(manager: Session, driver: User, payment: String = "CASH", number: String = "10", complement: String = ""): JSONObject {
         val customer = Decode.session(api.request("POST", "/v1/customers", body = objectOf("storeSlug" to "bonamassa", "email" to "customer-${key()}@teste.example", "password" to "Customer-ci-password-2026", "name" to "Cliente Teste", "phone" to "11912345678")))
         val quote = api.request("POST", "/v1/orders/quote", customer.accessToken, objectOf(
             "items" to JSONArray().put(objectOf("kind" to "PIZZA", "flavorIds" to JSONArray(listOf("calabresa", "frango")), "size" to "LARGE", "crust" to "CREAM", "quantity" to 1, "note" to "Sem cebola")),
-            "mode" to "DELIVERY", "address" to objectOf("street" to "Rua do Teste", "number" to "10", "neighborhood" to "Centro", "city" to "São Paulo", "state" to "SP", "postalCode" to "01001000", "reference" to "Portão azul"),
+            "mode" to "DELIVERY", "address" to objectOf("street" to "Rua do Teste", "number" to number, "neighborhood" to "Centro", "city" to "São Paulo", "state" to "SP", "postalCode" to "01001000", "reference" to "Portão azul", "complement" to complement, "noComplement" to complement.isBlank()),
             "payment" to payment, "cashTendered" to if (payment == "CASH") 10000 else null, "note" to "Chamar no portão", "promotionId" to null), key())
         var order = api.request("POST", "/v1/orders", customer.accessToken, objectOf("quoteId" to quote.getString("quoteId")), key())
         for (action in listOf("accept", "prepare", "ready")) order = staff(order, action, manager)
         return staff(order, "assign", manager, objectOf("driverId" to driver.id))
     }
     private fun openOrder(number: Int) {
-        waitText("#$number")
-        compose.onNodeWithTag("api_queue").performScrollToNode(hasText("#$number"))
+        scrollQueue("#$number")
         compose.onNodeWithText("#$number").performClick()
+    }
+    private fun scrollQueue(text: String) {
+        compose.waitUntil(30_000) {
+            runCatching { compose.onNodeWithTag("api_queue").performScrollToNode(hasText(text)); true }.getOrDefault(false)
+        }
     }
     private fun requireStatus(token: String, id: String, status: String): Delivery {
         val actual = api.delivery(token, id); assertEquals(status, actual.status); return actual
@@ -126,6 +130,59 @@ class DriverApiFlowTest {
             compose.waitUntil(30_000) { compose.onAllNodes(hasText("E-mail") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             assertNull(secure.read()?.session)
             try { api.me(auth.accessToken); fail("Sessão deveria estar revogada") } catch (e: ApiFailure) { assertEquals(401, e.status) }
+        }
+    }
+
+    @Test fun groupedStopsStartAllOrdersTogetherAndRetryNeverDuplicatesTheirEvents() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
+        val manager = manager(); val driver = createDriver(manager, "Motoboy Rota Conjunta")
+        var auth = api.signIn(driver.email, password)
+        api.send(auth.accessToken, Pending.availability(true, endpoint, auth.user))
+        auth = auth.copy(user = api.me(auth.accessToken))
+        val a = order(manager, driver, complement = "Apto 12")
+        val b = order(manager, driver, complement = "Apto 22")
+        val c = order(manager, driver, "CARD", number = "20")
+        val selected = listOf(a, b, c).map { api.delivery(auth.accessToken, it.getString("id")) }
+        val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        secure.write(SavedState(endpoint.origin, "bonamassa", auth.user, auth))
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            waitText("Disponível para coletas")
+            scrollQueue("2 pedido(s) neste endereço")
+            compose.onNodeWithText("2 pedido(s) neste endereço").assertExists()
+            scrollQueue("Iniciar rota com 3 pedidos")
+            click("Iniciar rota com 3 pedidos")
+            waitText("Conferir saída conjunta")
+            compose.onNodeWithText("Confirmar e iniciar todas").assertIsNotEnabled()
+            assertTrue(selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ASSIGNED" })
+            compose.onNodeWithText("Conferi e retirei todos os pedidos desta lista").performScrollTo().performClick()
+            click("Confirmar e iniciar todas")
+            compose.waitUntil(30_000) { secure.read()?.pending == null && selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ON_ROUTE" } }
+            scrollQueue("Abrir rota no Google Maps")
+            compose.onNodeWithText("Abrir rota no Google Maps").assertExists()
+            screenshot("entregador-rota-conjunta.png")
+            val active = selected.map { api.delivery(auth.accessToken, it.id) }
+            assertEquals(2, groupDeliveries(active).size)
+            assertEquals(listOf("Apto 12", "Apto 22", ""), active.map { it.address?.complement })
+            for (d in active) {
+                assertEquals("OUT_FOR_DELIVERY", api.request("GET", "/v1/staff/orders/${d.id}", manager.accessToken).getString("status"))
+                assertEquals(1, d.events.count { it.action == "start" })
+            }
+            scenario.recreate(); waitText("Disponível para coletas")
+            // Complete only one order; the other apartment and other address remain on route.
+            val done = Decode.delivery(api.send(auth.accessToken, Pending.delivery(active[0], Command.COMPLETE, endpoint, auth.user, "Morador", true)))
+            assertEquals("DELIVERED", done.status)
+            assertEquals("OUT_FOR_DELIVERY", api.delivery(auth.accessToken, active[1].id).status)
+            assertEquals("OUT_FOR_DELIVERY", api.delivery(auth.accessToken, active[2].id).status)
+        }
+        // The durable batch itself also recovers from an acknowledgement lost before restart.
+        val d = order(manager, driver, "CARD", number = "30")
+        val pending = Pending.route(listOf(api.delivery(auth.accessToken, d.getString("id"))), endpoint, auth.user)
+        secure.write(SavedState(endpoint.origin, "bonamassa", auth.user, auth, pending))
+        api.send(auth.accessToken, pending)
+        ActivityScenario.launch(MainActivity::class.java).use {
+            waitText("Envio aguardando confirmação"); click("Verificar envio")
+            compose.waitUntil(30_000) { secure.read()?.pending == null }
+            assertEquals(1, api.delivery(auth.accessToken, d.getString("id")).events.count { event -> event.action == "start" })
         }
     }
 
