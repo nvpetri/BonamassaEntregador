@@ -13,8 +13,8 @@ android {
         applicationId = "br.com.bonamassa.driver"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
         val apiUrl = providers.gradleProperty("bonamassaApiUrl").orElse("").get()
         val storeSlug = providers.gradleProperty("bonamassaStoreSlug").orElse("bonamassa").get()
         require(apiUrl.matches(Regex("[A-Za-z0-9:/._-]*"))) { "bonamassaApiUrl inválida" }

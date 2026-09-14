@@ -1,20 +1,36 @@
 package br.com.bonamassa.driver.client
 
 import org.json.JSONObject
+import org.json.JSONArray
 import java.util.UUID
 
 /** Persisted before sending. A retry always uses the original method, body and key. */
 data class Pending(val method: String, val path: String, val body: String, val key: String, val ownerId: String, val storeId: String, val origin: String) {
     val availability get() = path == "/v1/driver/availability"
-    val deliveryId get() = if (availability) null else path.split('/')[4]
+    val startsRoute get() = path == "/v1/driver/routes/start"
+    val deliveryId get() = if (availability || startsRoute) null else path.split('/')[4]
+    val routeIds get() = JSONObject(body).getJSONArray("deliveries").let { list -> (0 until list.length()).map { list.getJSONObject(it).getString("id") } }
     fun belongsTo(endpoint: Endpoint, user: User) = user.role == "DRIVER" && ownerId == user.id && storeId == user.storeId && origin == endpoint.origin
     fun validate() {
         UUID.fromString(key)
-        require((method == "PATCH" && availability) || (method == "POST" && path.matches(Regex("/v1/driver/deliveries/[a-fA-F0-9-]{36}/(collect|start|complete|issue|return)"))))
+        require((method == "PATCH" && availability) || (method == "POST" && (startsRoute || path.matches(Regex("/v1/driver/deliveries/[a-fA-F0-9-]{36}/(collect|start|complete|issue|return)")))))
         deliveryId?.let(UUID::fromString)
-        require(JSONObject(body).getInt("expectedVersion") > 0)
+        val data = JSONObject(body)
+        if (startsRoute) {
+            val deliveries = data.getJSONArray("deliveries")
+            require(deliveries.length() in 1..100 && data.getBoolean("confirmCollected"))
+            require(routeIds.distinct().size == deliveries.length())
+            routeIds.forEach(UUID::fromString)
+            for (i in 0 until deliveries.length()) require(deliveries.getJSONObject(i).getInt("expectedVersion") > 0)
+        } else require(data.getInt("expectedVersion") > 0)
     }
     companion object {
+        fun route(deliveries: List<Delivery>, endpoint: Endpoint, user: User): Pending {
+            require(deliveries.size in 1..100 && deliveries.all { it.canStartRoute }) { "Atualize e confira os pedidos da rota." }
+            require(deliveries.none { it.deliveryStatus == "ASSIGNED" } || user.available) { "Ative sua disponibilidade antes de retirar." }
+            val body = objectOf("confirmCollected" to true, "deliveries" to JSONArray(deliveries.map { objectOf("id" to it.id, "expectedVersion" to it.version) }))
+            return Pending("POST", "/v1/driver/routes/start", body.toString(), UUID.randomUUID().toString(), user.id, user.storeId, endpoint.origin).also { it.validate() }
+        }
         fun availability(available: Boolean, endpoint: Endpoint, user: User) = Pending("PATCH", "/v1/driver/availability",
             objectOf("expectedVersion" to user.version, "available" to available).toString(), UUID.randomUUID().toString(), user.id, user.storeId, endpoint.origin)
         fun delivery(order: Delivery, command: Command, endpoint: Endpoint, user: User, recipient: String = "", paymentCollected: Boolean = false, reason: String = ""): Pending {

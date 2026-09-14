@@ -46,11 +46,18 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
     }
     var tab by rememberSaveable { mutableStateOf(0) }
     var command by remember { mutableStateOf<Command?>(null) }
+    var routeBatch by remember { mutableStateOf<List<Delivery>?>(null) }
     val delivery = ui.deliveries.find { it.id == ui.selected }
     LaunchedEffect(ui.selected, delivery?.version, ui.saved.session?.accessToken) { command = null }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(ui.error) { ui.error?.let { snackbar.showSnackbar(it); vm.clearError() } }
     BackHandler(ui.selected != null) { vm.select(null) }
+    if (ui.saved.session == null) routeBatch = null
+    routeBatch?.let { batch ->
+        val unchanged = batch.all { selected -> ui.deliveries.any { it.id == selected.id && it.version == selected.version && it.canStartRoute } }
+        RouteStartDialog(batch, ui.canWrite && unchanged && (batch.none { it.deliveryStatus == "ASSIGNED" } || ui.saved.session?.user?.available == true),
+            { routeBatch = null }, { vm.startRoute(batch); routeBatch = null })
+    }
     if (delivery != null && command != null) key(delivery.id, command) {
         CommandDialog(delivery, requireNotNull(command), ui.canWrite, { command = null }) { name, paid, reason ->
             vm.command(delivery, requireNotNull(command), name, paid, reason); command = null
@@ -111,7 +118,7 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
                 !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 ui.saved.session == null -> LoginScreen(ui, vm::signIn)
                 ui.selected != null && delivery != null -> DeliveryScreen(delivery, vm::message)
-                tab == 0 -> QueueScreen(ui, vm::available, vm::select, vm::refresh)
+                tab == 0 -> QueueScreen(ui, vm::available, vm::select, vm::refresh, { routeBatch = it }, vm::message)
                 tab == 1 -> HistoryScreen(ui, vm::select, vm::more)
                 else -> ProfileScreen(ui, vm::logout)
             }
@@ -139,10 +146,14 @@ private fun LoginScreen(ui: DriverUi, signIn: (String, String) -> Unit) {
 }
 
 @Composable
-private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (String) -> Unit, refresh: () -> Unit) {
+private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (String) -> Unit, refresh: () -> Unit, startRoute: (List<Delivery>) -> Unit, message: (String) -> Unit) {
+    val context = LocalContext.current
     var filter by rememberSaveable { mutableStateOf("Todas") }
     val active = ui.deliveries.filter { it.active }
     val shown = active.filter { when (filter) { "Coletas" -> it.deliveryStatus in setOf("ASSIGNED", "COLLECTED"); "Em rota" -> it.deliveryStatus in setOf("ON_ROUTE", "RETURNING"); else -> true } }
+    val groups = groupDeliveries(shown)
+    val ready = active.filter { it.canStartRoute }
+    val onRoute = groupDeliveries(active.filter { it.deliveryStatus == "ON_ROUTE" && it.status == "OUT_FOR_DELIVERY" })
     LazyColumn(Modifier.fillMaxSize().testTag("api_queue"), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
             Text("Boa rota, ${ui.saved.session?.user?.name?.substringBefore(' ')}.", style = MaterialTheme.typography.headlineLarge)
@@ -165,6 +176,31 @@ private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (Strin
                 }
             }
         }
+        if (ready.isNotEmpty()) item {
+            Panel {
+                Text("Saída conjunta", style = MaterialTheme.typography.titleLarge)
+                Text("${ready.size} pedidos · ${groupDeliveries(ready).size} endereços. Confira todos os volumes antes de sair.", color = Brand.Muted)
+                if (ready.any { it.deliveryStatus == "ASSIGNED" } && ui.saved.session?.user?.available != true) Text("Ative sua disponibilidade para retirar os pedidos.", color = Brand.Gold)
+                PrimaryAction("Iniciar rota com ${ready.size} pedidos", Modifier.fillMaxWidth(), ui.canWrite && ready.size <= 100 && (ready.none { it.deliveryStatus == "ASSIGNED" } || ui.saved.session?.user?.available == true)) { startRoute(ready) }
+            }
+        }
+        if (onRoute.isNotEmpty()) item {
+            Panel {
+                Text("Rota em andamento", style = MaterialTheme.typography.titleLarge)
+                Text("${onRoute.sumOf { it.deliveries.size }} pedidos · ${onRoute.size} paradas. Conclua cada pedido separadamente.", color = Brand.Muted)
+                val legs = runCatching { routeLegs(onRoute) }
+                if (legs.isFailure) Text(legs.exceptionOrNull()?.message.orEmpty(), color = Brand.Gold)
+                legs.getOrNull()?.let { parts ->
+                    if (parts.size > 1) Text("O Maps abre esta rota em ${parts.size} trechos. Todos os endereços estão listados abaixo.", color = Brand.Gold)
+                    parts.forEachIndexed { index, leg ->
+                        OutlinedButton({ ExternalActions.routeLeg(context, leg, message) }, Modifier.fillMaxWidth(), enabled = ui.canWrite) {
+                            Text(if (parts.size == 1) "Abrir rota no Google Maps" else "Abrir trecho ${index + 1} de ${parts.size} · ${leg.stops.size} paradas")
+                        }
+                    }
+                }
+                Text("Paradas na ordem do pedido mais antigo de cada endereço. Confira a sequência no Maps antes de dirigir.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Suas entregas", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
@@ -175,7 +211,13 @@ private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (Strin
             }
         }
         if (shown.isEmpty()) item { EmptyState("Nenhuma entrega aqui", if (ui.updatedAt == null) "Aguarde a atualização do servidor." else "As entregas atribuídas pelo painel aparecerão aqui.", Icons.Default.TaskAlt) }
-        items(shown, key = { it.id }) { DeliveryCard(it) { open(it.id) } }
+        items(groups, key = { it.key }) { stop ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stop.address?.let { "${it.street}, ${it.number} · ${it.city}/${it.state}" } ?: "Endereço a confirmar", style = MaterialTheme.typography.titleMedium, color = Brand.Gold)
+                Text("${stop.deliveries.size} pedido(s) neste endereço", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                stop.deliveries.forEach { d -> DeliveryCard(d) { open(d.id) } }
+            }
+        }
         item { Text(ui.updatedAt?.let { "Atualizado em ${timestamp(it)}" } ?: "Aguardando conexão", color = Brand.Muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
@@ -189,6 +231,7 @@ private fun DeliveryCard(d: Delivery, open: () -> Unit) {
         }
         Text(d.customer, style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
         Text(d.address?.let { "${it.street}, ${it.number}\n${it.neighborhood}" } ?: "Endereço não informado")
+        d.address?.let { if (it.complement.isNotBlank()) Text("Complemento: ${it.complement}", color = Brand.Gold) else if (it.noComplement) Text("Sem complemento", color = Brand.Muted) }
         HorizontalDivider(color = Brand.Border)
         Text(when { d.status in setOf("RETURNING", "RETURNED") -> "Tentativa sem sucesso"; d.needsPayment -> "Cobrar ${money(d.total)}"; else -> "Pagamento confirmado" }, color = if (!d.needsPayment) Brand.Green else Brand.Cream)
         if (d.needsPayment && d.payment == "CASH" && d.change > 0) Text("Levar troco: ${money(d.change)}", style = MaterialTheme.typography.bodySmall, color = Brand.Gold)
@@ -268,12 +311,14 @@ private fun DeliveryScreen(d: Delivery, message: (String) -> Unit) {
             if (address == null) Text("Endereço indisponível. Confirme com a pizzaria.") else {
                 Text("${address.street}, ${address.number}")
                 Text("${address.neighborhood} · ${address.city}/${address.state}\nCEP ${address.postalCode}", color = Brand.Muted)
+                if (address.complement.isNotBlank()) Text("Complemento: ${address.complement}", color = Brand.Gold)
+                if (address.noComplement) Text("Sem complemento", color = Brand.Muted)
                 if (address.reference.isNotBlank()) Text("Referência: ${address.reference}", color = Brand.Gold)
                 if (d.status !in setOf("RETURNING", "RETURNED")) {
                     PrimaryAction("Abrir no Google Maps", Modifier.fillMaxWidth(), icon = Icons.Default.NearMe) { ExternalActions.route(context, address.route, false, message) }
                     OutlinedButton({ ExternalActions.route(context, address.route, true, message) }, Modifier.fillMaxWidth()) { Text("Abrir no Waze") }
                 }
-                TextButton({ clipboard.setText(AnnotatedString(address.route)); message("Endereço copiado.") }) { Text("Copiar endereço") }
+                TextButton({ clipboard.setText(AnnotatedString(listOf(address.route, address.complement, address.reference).filter { it.isNotBlank() }.joinToString(" · "))); message("Endereço copiado.") }) { Text("Copiar endereço") }
             }
             if (d.phone.isNotBlank()) OutlinedButton({ ExternalActions.dial(context, d.phone, message) }, Modifier.fillMaxWidth()) { Text("Ligar para o cliente") }
         }
@@ -312,6 +357,30 @@ private fun DeliveryScreen(d: Delivery, message: (String) -> Unit) {
         }
     }
 }
+@Composable
+private fun RouteStartDialog(batch: List<Delivery>, enabled: Boolean, dismiss: () -> Unit, start: () -> Unit) {
+    var checked by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = dismiss, title = { Text("Conferir saída conjunta") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("${batch.size} pedidos serão marcados como a caminho. A pizzaria e os clientes receberão a atualização.")
+            groupDeliveries(batch).forEach { stop ->
+                Text(stop.address?.route ?: "Endereço não informado", style = MaterialTheme.typography.titleSmall)
+                stop.deliveries.forEach { d ->
+                    Text("#${d.number} · ${d.customer}" + d.address?.complement?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty())
+                    Text(d.items.joinToString("; ") { "${it.quantity}× ${it.name}" }, style = MaterialTheme.typography.bodySmall)
+                    if (d.needsPayment) Text("Cobrar ${money(d.total)}" + if (d.payment == "CARD") " · Levar maquininha" else " · Troco ${money(d.change)}", color = Brand.Gold)
+                }
+            }
+            Row(Modifier.fillMaxWidth().clickable { checked = !checked }, verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked, { checked = it })
+                Text("Conferi e retirei todos os pedidos desta lista")
+            }
+            if (!enabled) Text("A lista ou sua disponibilidade mudou. Volte e atualize antes de sair.", color = Brand.Gold)
+        }
+    }, confirmButton = { TextButton(start, enabled = enabled && checked) { Text("Confirmar e iniciar todas") } },
+        dismissButton = { TextButton(dismiss) { Text("Voltar") } })
+}
+
 private fun eventLabel(action: String) = when (action) {
     "created" -> "Pedido recebido"; "accept" -> "Pedido aceito"; "prepare" -> "Em preparo"; "ready" -> "Pronto"
     "assign" -> "Atribuído ao entregador"; "collect" -> "Retirado na pizzaria"; "start" -> "Saiu para entrega"
