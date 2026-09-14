@@ -64,3 +64,7 @@ bash gradlew :app:assembleDebug -PbonamassaApiUrl=http://10.0.2.2:3001 -Pbonamas
 Release continua exigindo HTTPS. Ao atualizar uma instalação antiga, o aplicativo migra para o servidor configurado no build quando não há comando pendente. A assinatura de produção deve ser configurada pelo proprietário. Esta versão não implementa notificações push, rastreamento GPS em segundo plano ou prestação de contas/repasse. Maps e Waze são abertos por toque do usuário; o app não solicita localização nem permissão para fazer chamadas.
 
 Detalhes: [integração](docs/INTEGRACAO.md) e [verificação](docs/VERIFICACAO.md).
+
+## Preparação para produção
+
+Leia [docs/PRODUCAO.md](docs/PRODUCAO.md) antes de distribuir o aplicativo. O release agora valida HTTPS e recusa flags demo/integração. Compilar não assina nem publica: o guia explica servidor definitivo, assinatura, atualização segura e testes em aparelho real.

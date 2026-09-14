@@ -43,6 +43,15 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
       - name: Compilar, testar e analisar Android
         run: bash gradlew :core:test :client:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+      - name: Validar build release sem assinatura de produção
+        run: bash gradlew :app:verifyReleaseConfiguration :app:assembleRelease :app:lintRelease --stacktrace
+      - name: Recusar release apontando para HTTP
+        run: |
+          if bash gradlew :app:verifyReleaseConfiguration -PbonamassaApiUrl=http://127.0.0.1:3001 > "$RUNNER_TEMP/insecure-release.log" 2>&1; then
+            echo "ERRO: release HTTP não foi recusado"
+            exit 1
+          fi
+          grep -F "Release requer uma origem HTTPS" "$RUNNER_TEMP/insecure-release.log"
       - uses: actions/upload-artifact@v4
         with:
           name: Bonamassa-entregador-debug
@@ -55,7 +64,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nvpetri/APIBonamassa
-          ref: c9fcefad3827343a27abd5b0d14970a935b182b5
+          ref: 8b9832fdb0d509e89e1897822de414a6521e7254
           path: _api
           persist-credentials: false
       - run: npm ci

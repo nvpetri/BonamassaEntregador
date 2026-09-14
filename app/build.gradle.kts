@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,14 +15,18 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.3.0"
-        buildConfigField("String", "API_URL", "\"${providers.gradleProperty("bonamassaApiUrl").orElse("").get()}\"")
-        buildConfigField("String", "STORE_SLUG", "\"${providers.gradleProperty("bonamassaStoreSlug").orElse("bonamassa").get()}\"")
+        val apiUrl = providers.gradleProperty("bonamassaApiUrl").orElse("").get()
+        val storeSlug = providers.gradleProperty("bonamassaStoreSlug").orElse("bonamassa").get()
+        require(apiUrl.matches(Regex("[A-Za-z0-9:/._-]*"))) { "bonamassaApiUrl inválida" }
+        require(storeSlug.matches(Regex("[a-z0-9-]{1,60}"))) { "bonamassaStoreSlug inválida" }
+        buildConfigField("String", "API_URL", "\"$apiUrl\"")
+        buildConfigField("String", "STORE_SLUG", "\"$storeSlug\"")
         buildConfigField("boolean", "DEMO_MODE", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
     buildTypes {
-        debug { buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("bonamassaDemo").orElse("false").get()) }
+        debug { buildConfigField("boolean", "DEMO_MODE", providers.gradleProperty("bonamassaDemo").orElse("false").get().toBoolean().toString()) }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -56,4 +62,30 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+}
+
+val verifyReleaseConfiguration by tasks.registering {
+    group = "verification"
+    description = "Recusa release com HTTP, endpoint inválido ou flags de teste/demo."
+    val apiUrl = providers.gradleProperty("bonamassaApiUrl").orElse("")
+    val demo = providers.gradleProperty("bonamassaDemo").orElse("false")
+    val integration = providers.gradleProperty("bonamassaIntegration").orElse("false")
+    inputs.property("apiUrl", apiUrl)
+    inputs.property("demo", demo)
+    inputs.property("integration", integration)
+    doLast {
+        val endpoint = runCatching { URI(apiUrl.get()) }.getOrNull()
+        require(endpoint != null && endpoint.scheme == "https" && !endpoint.host.isNullOrBlank() &&
+            endpoint.rawUserInfo == null && endpoint.rawQuery == null && endpoint.rawFragment == null &&
+            (endpoint.rawPath.isNullOrEmpty() || endpoint.rawPath == "/")) {
+            "Release requer uma origem HTTPS válida, sem caminho, credenciais ou parâmetros."
+        }
+        require(demo.get() == "false" && integration.get() == "false") {
+            "Release não permite bonamassaDemo ou bonamassaIntegration."
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(verifyReleaseConfiguration)
 }

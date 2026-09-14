@@ -10,3 +10,8 @@ local.properties
 
 _api/
 device-screenshots/
+
+# Nunca versionar a assinatura de distribuição ou suas senhas.
+keystore.properties
+signing.properties
+.env*
