@@ -116,7 +116,7 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
                     PrimaryAction("Tentar novamente", Modifier.fillMaxWidth(), !ui.busy) { vm.load() }
                 }
                 !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                ui.saved.session == null -> LoginScreen(ui, vm::signIn)
+                ui.saved.session == null -> LoginScreen(ui, vm::signIn, vm::requestEmailVerification, vm::confirmEmail, vm::requestPasswordReset, vm::resetPassword)
                 ui.selected != null && delivery != null -> DeliveryScreen(delivery, vm::message)
                 tab == 0 -> QueueScreen(ui, vm::available, vm::select, vm::refresh, { routeBatch = it }, vm::message)
                 tab == 1 -> HistoryScreen(ui, vm::select, vm::more)
@@ -127,19 +127,48 @@ fun ConnectedDriverApp(vm: ConnectedDriverViewModel = viewModel()) {
 }
 
 @Composable
-private fun LoginScreen(ui: DriverUi, signIn: (String, String) -> Unit) {
+private fun LoginScreen(
+    ui: DriverUi,
+    signIn: (String, String) -> Unit,
+    resendVerification: (String) -> Unit,
+    confirmEmail: (String, String) -> Unit,
+    requestReset: (String, () -> Unit) -> Unit,
+    resetPassword: (String, String, String, () -> Unit) -> Unit,
+) {
     var email by rememberSaveable(ui.saved.account?.email) { mutableStateOf(ui.saved.account?.email.orEmpty()) }
-    // Password is intentionally never saved in the instance bundle or on disk.
+    var mode by rememberSaveable { mutableStateOf("login") }
+    var code by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Spacer(Modifier.height(12.dp))
-        Text("Sua próxima entrega\ncomeça aqui.", style = MaterialTheme.typography.headlineLarge)
-        Text("Entre com a conta cadastrada pela pizzaria.", color = Brand.Muted)
+        Text(when (mode) { "verify" -> "Confirme seu e-mail."; "forgot" -> "Recupere seu acesso."; "reset" -> "Crie uma nova senha."; else -> "Sua próxima entrega\ncomeça aqui." }, style = MaterialTheme.typography.headlineLarge)
+        Text(when (mode) { "verify" -> "Digite o código de 6 dígitos enviado para $email."; "forgot" -> "Vamos enviar um código para o seu e-mail."; "reset" -> "Informe o código recebido e a nova senha."; else -> "Entre com a conta cadastrada pela pizzaria." }, color = Brand.Muted)
         Panel {
-            Input("E-mail", email, { email = it.take(254) }, !ui.busy, KeyboardType.Email)
-            OutlinedTextField(password, { password = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Senha") }, singleLine = true,
-                enabled = !ui.busy, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-            PrimaryAction("Entrar nas entregas", Modifier.fillMaxWidth(), !ui.busy && email.isNotBlank() && password.isNotEmpty(), Icons.Default.Login) { signIn(email, password) }
+            if (mode != "verify" && mode != "reset") Input("E-mail", email, { email = it.take(254) }, !ui.busy, KeyboardType.Email)
+            if (mode in listOf("verify", "reset")) Input("Código de 6 dígitos", code, { code = it.filter(Char::isDigit).take(6) }, !ui.busy, KeyboardType.Number)
+            if (mode == "login") {
+                OutlinedTextField(password, { password = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Senha") }, singleLine = true,
+                    enabled = !ui.busy, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                PrimaryAction("Entrar nas entregas", Modifier.fillMaxWidth(), !ui.busy && email.isNotBlank() && password.isNotEmpty(), Icons.Default.Login) { signIn(email, password) }
+                TextButton({ mode = "forgot" }, enabled = !ui.busy) { Text("Esqueci minha senha") }
+                TextButton({ code = ""; mode = "verify" }, enabled = !ui.busy && email.isNotBlank()) { Text("Confirmar meu e-mail") }
+            } else if (mode == "verify") {
+                PrimaryAction("Confirmar e entrar", Modifier.fillMaxWidth(), !ui.busy && code.length == 6) { confirmEmail(email, code) }
+                TextButton({ resendVerification(email) }, enabled = !ui.busy) { Text("Reenviar código") }
+                TextButton({ mode = "login" }, enabled = !ui.busy) { Text("Voltar") }
+            } else if (mode == "forgot") {
+                PrimaryAction("Enviar código", Modifier.fillMaxWidth(), !ui.busy && email.isNotBlank()) { requestReset(email) { code = ""; mode = "reset" } }
+                TextButton({ mode = "login" }, enabled = !ui.busy) { Text("Voltar") }
+            } else {
+                OutlinedTextField(newPassword, { newPassword = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Nova senha") }, singleLine = true,
+                    enabled = !ui.busy, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                Text("Use de 12 a 128 caracteres.", color = Brand.Muted)
+                PrimaryAction("Salvar nova senha", Modifier.fillMaxWidth(), !ui.busy && code.length == 6 && newPassword.length >= 12) {
+                    resetPassword(email, code, newPassword) { password = ""; newPassword = ""; code = ""; mode = "login" }
+                }
+                TextButton({ requestReset(email) {} }, enabled = !ui.busy) { Text("Reenviar código") }
+            }
         }
         Text("Ainda não tem acesso? Peça ao responsável para cadastrar seu perfil de entregador no painel.", style = MaterialTheme.typography.bodyMedium, color = Brand.Muted)
     }
