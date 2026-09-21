@@ -63,6 +63,20 @@ class DriverApi(val endpoint: Endpoint) {
         }
         return session
     }
+    private fun emailBody(email: String) = objectOf("storeSlug" to endpoint.storeSlug, "email" to email.trim().lowercase())
+    fun requestEmailVerification(email: String) { request("POST", "/v1/auth/email-verification/request", body = emailBody(email)) }
+    fun confirmEmail(email: String, code: String): Session {
+        val session = Decode.session(request("POST", "/v1/auth/email-verification/confirm", body = emailBody(email).put("code", code.filter(Char::isDigit))))
+        if (session.user.role != "DRIVER" || !session.user.enabled) {
+            runCatching { logout(session.accessToken) }
+            throw ApiFailure(403, "DRIVER_ONLY", "Use a conta de entregador cadastrada no painel da pizzaria.", null)
+        }
+        return session
+    }
+    fun requestPasswordReset(email: String) { request("POST", "/v1/auth/password-reset/request", body = emailBody(email)) }
+    fun resetPassword(email: String, code: String, password: String) {
+        request("POST", "/v1/auth/password-reset/confirm", body = emailBody(email).put("code", code.filter(Char::isDigit)).put("newPassword", password))
+    }
     fun me(token: String) = Decode.user(request("GET", "/v1/me", token))
     fun logout(token: String) { request("DELETE", "/v1/sessions/current", token) }
     fun send(token: String, pending: Pending): JSONObject {
