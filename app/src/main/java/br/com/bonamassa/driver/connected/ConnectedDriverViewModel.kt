@@ -103,6 +103,30 @@ class ConnectedDriverViewModel(application: Application) : AndroidViewModel(appl
         catch (e: Exception) { withContext(Dispatchers.IO) { runCatching { client.logout(next.accessToken) } }; throw e }
         resetData()
     }
+    private suspend fun acceptSession(client: DriverApi, next: Session) {
+        try { change { it.signedIn(next) } }
+        catch (e: Exception) { withContext(Dispatchers.IO) { runCatching { client.logout(next.accessToken) } }; throw e }
+        resetData()
+    }
+    fun requestEmailVerification(email: String) = action {
+        withContext(Dispatchers.IO) { api().requestEmailVerification(email) }
+    }
+    fun confirmEmail(email: String, code: String) = action {
+        require(code.filter(Char::isDigit).length == 6) { "Informe o código de 6 dígitos." }
+        val client = api()
+        acceptSession(client, withContext(Dispatchers.IO) { client.confirmEmail(email, code) })
+    }
+    fun requestPasswordReset(email: String, done: () -> Unit) = action {
+        require(email.isNotBlank()) { "Informe seu e-mail." }
+        withContext(Dispatchers.IO) { api().requestPasswordReset(email) }
+        done()
+    }
+    fun resetPassword(email: String, code: String, password: String, done: () -> Unit) = action {
+        require(code.filter(Char::isDigit).length == 6) { "Informe o código de 6 dígitos." }
+        require(password.length in 12..128) { "A nova senha deve ter de 12 a 128 caracteres." }
+        withContext(Dispatchers.IO) { api().resetPassword(email, code, password) }
+        done()
+    }
     fun logout() = action {
         editable()
         val old = session(); val client = api()
