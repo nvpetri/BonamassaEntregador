@@ -43,11 +43,14 @@ class DriverApiFlowTest {
         }
     }
     private fun manager(): Session = Decode.session(api.request("POST", "/v1/sessions", body = objectOf("storeSlug" to "bonamassa", "email" to "manager@teste.example", "password" to "Manager-ci-only-password-2026")))
-    private fun createDriver(manager: Session, name: String): User {
+    private fun createDriver(manager: Session, name: String, verify: Boolean = true): User {
         val user = Decode.user(api.request("POST", "/v1/staff/users", manager.accessToken,
             objectOf("email" to "driver-${key()}@teste.example", "password" to password, "name" to name, "phone" to "11922223333", "role" to "DRIVER"), key()))
-        api.request("POST", "/v1/auth/email-verification/request", body = objectOf("storeSlug" to "bonamassa", "email" to user.email))
-        api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to user.email, "code" to "123456"))
+        if (verify) {
+            api.request("POST", "/v1/auth/email-verification/request", body = objectOf("storeSlug" to "bonamassa", "email" to user.email))
+            val session = Decode.session(api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to user.email, "code" to "123456")))
+            api.logout(session.accessToken)
+        }
         return user
     }
     private fun staff(order: JSONObject, action: String, manager: Session, extra: JSONObject = JSONObject()): JSONObject = api.request("POST", "/v1/staff/orders/${order.getString("id")}/$action", manager.accessToken, extra.put("expectedVersion", order.getInt("version")), key())
@@ -74,6 +77,41 @@ class DriverApiFlowTest {
     }
     private fun requireStatus(token: String, id: String, status: String): Delivery {
         val actual = api.delivery(token, id); assertEquals(status, actual.status); return actual
+    }
+
+    @Test fun firstAccessRequestsEmailCodeAndPasswordResetRevokesPreviousSessions() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
+        val manager = manager()
+        val driver = createDriver(manager, "Primeiro acesso", verify = false)
+        val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug))
+        var previous: Session? = null
+        ActivityScenario.launch(MainActivity::class.java).use {
+            waitText("Entrar nas entregas")
+            input("E-mail", driver.email); click("Confirmar meu e-mail")
+            waitText("Confirme seu e-mail.")
+            assertNull(secure.read()?.session)
+            input("Código de 6 dígitos", "123456"); click("Confirmar e entrar")
+            waitText("Pedidos atribuídos pela Bonamassa")
+            previous = requireNotNull(secure.read()?.session)
+            assertEquals(driver.id, api.me(previous!!.accessToken).id)
+        }
+        secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug))
+        val next = "Driver-new-password-2026"
+        ActivityScenario.launch(MainActivity::class.java).use {
+            waitText("Entrar nas entregas")
+            input("E-mail", driver.email); click("Esqueci minha senha"); click("Enviar código")
+            waitText("Crie uma nova senha.")
+            input("Código de 6 dígitos", "123456"); input("Nova senha", next)
+            click("Salvar nova senha"); waitText("Entrar nas entregas")
+            try { api.me(previous!!.accessToken); fail("Password reset must revoke the previous session") }
+            catch (e: ApiFailure) { assertEquals(401, e.status) }
+            input("Senha", next); click("Entrar nas entregas")
+            waitText("Pedidos atribuídos pela Bonamassa")
+            assertEquals(driver.id, secure.read()?.session?.user?.id)
+        }
+        secure.write(SavedState(origin = endpoint.origin))
+        api.logout(manager.accessToken)
     }
 
     @Test fun assignedCashDeliveryUpdatesPanelAndRequiresExplicitHandoff() {

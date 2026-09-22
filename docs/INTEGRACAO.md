@@ -1,10 +1,11 @@
 # Integração com APIBonamassa
 
-Cliente compatível com o contrato da API em `c9fcefad3827343a27abd5b0d14970a935b182b5`. Nenhuma alteração no backend é necessária para esta integração.
+Cliente compatível com o contrato da API em `95f93f7f8331759c1b826c5bb04f255e680f8bbf`, a mesma revisão usada pelo painel e Android cliente nos testes integrados.
 
 | Operação | Endpoint |
 |---|---|
 | Entrar / sair | `POST /v1/sessions`, `DELETE /v1/sessions/current` |
+| Confirmar e-mail / recuperar senha | `POST /v1/auth/email-verification/request`, `.../confirm`, `POST /v1/auth/password-reset/request`, `.../confirm` |
 | Perfil e disponibilidade atual | `GET /v1/me` |
 | Alterar disponibilidade | `PATCH /v1/driver/availability` |
 | Lista paginada / detalhe | `GET /v1/driver/deliveries`, `GET /v1/driver/deliveries/{id}` |
@@ -26,6 +27,8 @@ Toda alteração operacional carrega `expectedVersion` e `Idempotency-Key`. O cl
 A conclusão exige nome do recebedor. Quando `paymentRecorded=false` e `total>0`, exige confirmação explícita de pagamento. Um pagamento já registrado pela pizzaria não é cobrado novamente. Devoluções não somam taxa de entrega concluída, conforme a regra atual do backend.
 
 ## Falhas e reconciliação
+
+No primeiro acesso, **Confirmar meu e-mail** solicita o código e abre a confirmação. A sessão renova a cada acesso autenticado e expira após cinco dias sem uso. Recuperar a senha invalida todas as sessões anteriores; o aplicativo usa o mesmo contrato que o painel e o cliente.
 
 `client/` contém contrato, modelos, validações e codec sem dependências Android. `app/connected/` gerencia a sessão e as telas. Os arquivos do modo demo permanecem separados.
 

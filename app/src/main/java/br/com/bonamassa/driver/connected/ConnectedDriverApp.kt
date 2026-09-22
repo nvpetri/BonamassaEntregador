@@ -152,7 +152,7 @@ private fun LoginScreen(
                     enabled = !ui.busy, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                 PrimaryAction("Entrar nas entregas", Modifier.fillMaxWidth(), !ui.busy && email.isNotBlank() && password.isNotEmpty(), Icons.Default.Login) { signIn(email, password) }
                 TextButton({ mode = "forgot" }, enabled = !ui.busy) { Text("Esqueci minha senha") }
-                TextButton({ code = ""; mode = "verify" }, enabled = !ui.busy && email.isNotBlank()) { Text("Confirmar meu e-mail") }
+                TextButton({ code = ""; mode = "verify"; resendVerification(email) }, enabled = !ui.busy && email.isNotBlank()) { Text("Confirmar meu e-mail") }
             } else if (mode == "verify") {
                 PrimaryAction("Confirmar e entrar", Modifier.fillMaxWidth(), !ui.busy && code.length == 6) { confirmEmail(email, code) }
                 TextButton({ resendVerification(email) }, enabled = !ui.busy) { Text("Reenviar código") }

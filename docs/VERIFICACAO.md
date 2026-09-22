@@ -1,12 +1,13 @@
 # Verificação
 
-O workflow `.github/workflows/android.yml` compila o aplicativo e os testes, executa regras JVM, contratos HTTP e Android lint. Em seguida inicia PostgreSQL 17, aplica migrações e seed da API fixada em `c9fcefad3827343a27abd5b0d14970a935b182b5` e executa os testes de interface em Android 35.
+O workflow `.github/workflows/android.yml` compila o aplicativo e os testes, executa regras JVM, contratos HTTP e Android lint. Em seguida inicia PostgreSQL 17, aplica migrações e seed da mesma revisão da API usada pelos outros consumidores (ver `INTEGRACAO.md`) e executa os testes de interface em Android 35.
 
 Os testes conectados são opt-in e usam somente a loja isolada de CI. Credenciais de fixtures estão no APK de instrumentação, não no APK distribuído. Não execute o teste integrado contra dados reais.
 
 Cobertura do fluxo integrado:
 
-- Login pela tela e configuração da API; disponibilidade refletida no servidor.
+- Primeiro acesso solicita e confirma e-mail pela tela; recuperação de senha revoga a sessão anterior e aceita o novo login.
+- Login pela tela; disponibilidade refletida no servidor.
 - Pedido criado por cliente, preparado e atribuído pela gerência; retirada e saída pelo app.
 - Pausa de coletas sem bloquear entregas já retiradas.
 - Nome e confirmação explícita de dinheiro na conclusão; painel recebe o mesmo resultado.
