@@ -43,11 +43,18 @@ class DriverApiFlowTest {
         }
     }
     private fun manager(): Session = Decode.session(api.request("POST", "/v1/sessions", body = objectOf("storeSlug" to "bonamassa", "email" to "manager@teste.example", "password" to "Manager-ci-only-password-2026")))
-    private fun createDriver(manager: Session, name: String): User = Decode.user(api.request("POST", "/v1/staff/users", manager.accessToken,
-        objectOf("email" to "driver-${key()}@teste.example", "password" to password, "name" to name, "phone" to "11922223333", "role" to "DRIVER"), key()))
+    private fun createDriver(manager: Session, name: String): User {
+        val user = Decode.user(api.request("POST", "/v1/staff/users", manager.accessToken,
+            objectOf("email" to "driver-${key()}@teste.example", "password" to password, "name" to name, "phone" to "11922223333", "role" to "DRIVER"), key()))
+        api.request("POST", "/v1/auth/email-verification/request", body = objectOf("storeSlug" to "bonamassa", "email" to user.email))
+        api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to user.email, "code" to "123456"))
+        return user
+    }
     private fun staff(order: JSONObject, action: String, manager: Session, extra: JSONObject = JSONObject()): JSONObject = api.request("POST", "/v1/staff/orders/${order.getString("id")}/$action", manager.accessToken, extra.put("expectedVersion", order.getInt("version")), key())
     private fun order(manager: Session, driver: User, payment: String = "CASH", number: String = "10", complement: String = ""): JSONObject {
-        val customer = Decode.session(api.request("POST", "/v1/customers", body = objectOf("storeSlug" to "bonamassa", "email" to "customer-${key()}@teste.example", "password" to "Customer-ci-password-2026", "name" to "Cliente Teste", "phone" to "11912345678")))
+        val customerEmail = "customer-${key()}@teste.example"
+        api.request("POST", "/v1/customers", body = objectOf("storeSlug" to "bonamassa", "email" to customerEmail, "password" to "Customer-ci-password-2026", "name" to "Cliente Teste", "phone" to "11912345678"))
+        val customer = Decode.session(api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to customerEmail, "code" to "123456")))
         val quote = api.request("POST", "/v1/orders/quote", customer.accessToken, objectOf(
             "items" to JSONArray().put(objectOf("kind" to "PIZZA", "flavorIds" to JSONArray(listOf("calabresa", "frango")), "size" to "LARGE", "crust" to "CREAM", "quantity" to 1, "note" to "Sem cebola")),
             "mode" to "DELIVERY", "address" to objectOf("street" to "Rua do Teste", "number" to number, "neighborhood" to "Centro", "city" to "São Paulo", "state" to "SP", "postalCode" to "01001000", "reference" to "Portão azul", "complement" to complement, "noComplement" to complement.isBlank()),
