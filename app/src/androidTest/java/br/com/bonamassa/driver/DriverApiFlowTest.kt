@@ -79,7 +79,10 @@ class DriverApiFlowTest {
     @Test fun assignedCashDeliveryUpdatesPanelAndRequiresExplicitHandoff() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
         val manager = manager(); val driver = createDriver(manager, "Nicolas Teste")
-        api.request("PATCH", "/v1/staff/drivers/${driver.id}/availability", manager.accessToken, objectOf("expectedVersion" to driver.version, "available" to false), key())
+        val driverVersion = api.request("GET", "/v1/staff/drivers", manager.accessToken).getJSONArray("items").let { rows ->
+            (0 until rows.length()).map { rows.getJSONObject(it) }.first { it.getString("id") == driver.id }.getInt("version")
+        }
+        api.request("PATCH", "/v1/staff/drivers/${driver.id}/availability", manager.accessToken, objectOf("expectedVersion" to driverVersion, "available" to false), key())
         val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
         secure.write(SavedState(origin = endpoint.origin, slug = "bonamassa"))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
