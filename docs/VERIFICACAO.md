@@ -16,6 +16,7 @@ Cobertura do fluxo integrado:
 - Perda de resposta e reinício: replay da mesma chave, sem repetir retirada e sem regredir estado mais recente.
 - Rejeição de versão antiga; motivo de tentativa e devolução sem taxa de entrega concluída.
 - PATCH pendente preservado após sessão expirada e recuperado com novo login.
+- Leituras e gravações concorrentes em instâncias distintas do armazenamento criptografado preservam cada gravação confirmada.
 
 Os testes JVM verificam transições, pagamento, isolamento da conta/origem, serialização exata, requisições PATCH, paginação, rejeição de perfis indevidos e bloqueio de redirecionamentos com credenciais. A demonstração mantém seus testes de regras, codec e interface.
 

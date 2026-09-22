@@ -1,6 +1,6 @@
 # Integração com APIBonamassa
 
-Cliente compatível com o contrato da API em `95f93f7f8331759c1b826c5bb04f255e680f8bbf`, a mesma revisão usada pelo painel e Android cliente nos testes integrados.
+Cliente compatível com o contrato da API em `dad549c6225115c018e2d38e42b1c2b1965a6771`, a mesma revisão usada pelo painel e Android cliente nos testes integrados.
 
 | Operação | Endpoint |
 |---|---|

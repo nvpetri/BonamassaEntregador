@@ -15,6 +15,10 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** A single encrypted transaction contains the session and original pending write. */
 class SecureStore(context: Context) {
+    companion object {
+        // AtomicFile requires one lock across readers and writers, including other instances.
+        private val fileLock = Any()
+    }
     private val file = AtomicFile(File(context.noBackupFilesDir, "driver-api-v1.bin"))
     private val alias = "bonamassa.driver.api.v1"
     private fun key(): SecretKey {
@@ -25,15 +29,15 @@ class SecureStore(context: Context) {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).setKeySize(256).build())
         }.generateKey()
     }
-    @Synchronized fun read(): SavedState? {
-        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return null
+    fun read(): SavedState? = synchronized(fileLock) {
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return@synchronized null
         val bytes = file.readFully()
         require(bytes.size > 29 && bytes[0] == 1.toByte())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
-        return SavedCodec.decode(String(cipher.doFinal(bytes.copyOfRange(13, bytes.size)), Charsets.UTF_8))
+        SavedCodec.decode(String(cipher.doFinal(bytes.copyOfRange(13, bytes.size)), Charsets.UTF_8))
     }
-    @Synchronized fun write(state: SavedState) {
+    fun write(state: SavedState) = synchronized(fileLock) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         check(cipher.iv.size == 12)

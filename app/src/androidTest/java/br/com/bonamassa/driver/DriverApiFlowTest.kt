@@ -34,7 +34,10 @@ class DriverApiFlowTest {
         if (compose.onAllNodes(hasText(text) and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) node.performScrollTo()
         node.performClick()
     }
-    private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
+    private fun input(label: String, text: String) {
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText(label) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(label).performScrollTo().performTextReplacement(text)
+    }
     private fun waitAvailable() = compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("availability") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
