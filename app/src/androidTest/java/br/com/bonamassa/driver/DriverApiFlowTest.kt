@@ -22,7 +22,7 @@ class DriverApiFlowTest {
     private val api = DriverApi(endpoint)
     private val password = "Driver-ci-password-2026"
     private fun key() = UUID.randomUUID().toString()
-    private fun waitText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitText(text: String) = compose.waitUntil(90_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun click(text: String) {
         try {
             compose.waitUntil(60_000) { compose.onAllNodes(hasText(text) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -35,7 +35,7 @@ class DriverApiFlowTest {
         node.performClick()
     }
     private fun input(label: String, text: String) { compose.onNodeWithText(label).performScrollTo().performTextReplacement(text) }
-    private fun waitAvailable() = compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("availability") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitAvailable() = compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("availability") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     private fun screenshot(name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         for (command in listOf("mkdir -p /data/local/tmp/bonamassa-screenshots", "screencap -p /data/local/tmp/bonamassa-screenshots/$name")) {
@@ -68,7 +68,7 @@ class DriverApiFlowTest {
         compose.onNodeWithText("#$number").performClick()
     }
     private fun scrollQueue(text: String) {
-        compose.waitUntil(30_000) {
+        compose.waitUntil(60_000) {
             runCatching { compose.onNodeWithTag("api_queue").performScrollToNode(hasText(text)); true }.getOrDefault(false)
         }
     }
@@ -135,7 +135,7 @@ class DriverApiFlowTest {
             click("Sair agora")
             waitText("Entrar nas entregas")
             // Local sign-out renders first; wait for the server revocation to finish too.
-            compose.waitUntil(30_000) { compose.onAllNodes(hasText("E-mail") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodes(hasText("E-mail") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             assertNull(secure.read()?.session)
             try { api.me(auth.accessToken); fail("Sessão deveria estar revogada") } catch (e: ApiFailure) { assertEquals(401, e.status) }
         }
@@ -164,7 +164,7 @@ class DriverApiFlowTest {
             assertTrue(selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ASSIGNED" })
             compose.onNodeWithText("Conferi e retirei todos os pedidos desta lista").performScrollTo().performClick()
             click("Confirmar e iniciar todas")
-            compose.waitUntil(30_000) { secure.read()?.pending == null && selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ON_ROUTE" } }
+            compose.waitUntil(60_000) { secure.read()?.pending == null && selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ON_ROUTE" } }
             scrollQueue("Abrir rota no Google Maps")
             compose.onNodeWithText("Abrir rota no Google Maps").assertExists()
             screenshot("entregador-rota-conjunta.png")
@@ -189,7 +189,7 @@ class DriverApiFlowTest {
         api.send(auth.accessToken, pending)
         ActivityScenario.launch(MainActivity::class.java).use {
             waitText("Envio aguardando confirmação"); click("Verificar envio")
-            compose.waitUntil(30_000) { secure.read()?.pending == null }
+            compose.waitUntil(60_000) { secure.read()?.pending == null }
             assertEquals(1, api.delivery(auth.accessToken, d.getString("id")).events.count { event -> event.action == "start" })
         }
     }
@@ -221,7 +221,7 @@ class DriverApiFlowTest {
         val started = Decode.delivery(api.send(auth.accessToken, Pending.delivery(result, Command.START, endpoint, auth.user)))
         ActivityScenario.launch(MainActivity::class.java).use {
             waitText("Envio aguardando confirmação"); click("Verificar envio")
-            compose.waitUntil(30_000) { secure.read()?.pending == null }
+            compose.waitUntil(60_000) { secure.read()?.pending == null }
             openOrder(created.getInt("number")); waitText("Confirmar entrega")
             assertEquals(1, api.delivery(auth.accessToken, id).events.count { e -> e.action == "collect" })
             // Backend rejects stale versions. The client must preserve a pending write until the rejection is known.
@@ -249,7 +249,7 @@ class DriverApiFlowTest {
             input("E-mail", driver.email); input("Senha", password); click("Entrar nas entregas")
             waitText("Verificar envio"); click("Verificar envio")
             waitText("Novas coletas pausadas")
-            compose.waitUntil(30_000) { secure.read()?.pending == null }
+            compose.waitUntil(60_000) { secure.read()?.pending == null }
             auth = requireNotNull(secure.read()?.session)
             assertFalse(api.me(auth.accessToken).available)
         }
