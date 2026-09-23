@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nvpetri/APIBonamassa
-          ref: dad549c6225115c018e2d38e42b1c2b1965a6771
+          ref: e2e3491741091b522272ebe3e43272a232fc701a
           path: _api
           persist-credentials: false
       - run: npm ci
