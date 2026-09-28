@@ -40,7 +40,7 @@ class DriverApi(val endpoint: Endpoint) {
     }
     fun request(method: String, path: String, token: String? = null, body: JSONObject? = null, key: String? = null): JSONObject {
         require(path.startsWith("/v1/") && !path.contains(".."))
-        val request = Request.Builder().url(endpoint.origin + path).header("Accept", "application/json")
+        val request = Request.Builder().url(endpoint.origin + path).header("Accept", "application/json").header("X-Client-Source", "DRIVER_APP")
             .method(method, body?.toString()?.toRequestBody("application/json; charset=utf-8".toMediaType()))
         token?.let { request.header("Authorization", "Bearer $it") }
         key?.let { request.header("Idempotency-Key", it) }

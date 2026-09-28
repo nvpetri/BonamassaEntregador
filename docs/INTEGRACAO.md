@@ -46,3 +46,5 @@ Push, rastreamento em segundo plano, endereço/contato da loja, fechamento de tu
 
 
 A equipe é cadastrada pelo gerente com nome, função e e-mail. O funcionário completa o cadastro pelo link de convite no navegador; entregadores definem senha e telefone antes de entrar no aplicativo. Os testes recebem o convite na caixa de e-mail local descartável da API e validam o login após a ativação. Contas de clientes continuam usando o cadastro e a confirmação de e-mail existentes.
+
+Auditoria central: o cliente identifica suas requisições com X-Client-Source, como pista de origem. A identidade responsável continua sendo validada pelo token na API. CI utiliza API `07a73957de48267384b35a21068cea1380dc64fa`, com migração de AuditTrail e rastreamento transacional.
