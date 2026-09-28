@@ -30,6 +30,10 @@ jobs:
       SEED_MANAGER_EMAIL: manager@teste.example
       SEED_MANAGER_PASSWORD: Manager-ci-only-password-2026
       SEED_DEMO: "true"
+      APP_ENV: test
+      STAFF_INVITE_URL: http://127.0.0.1:3000/convite
+      EMAIL_API_URL: http://127.0.0.1:3030/emails
+      EMAIL_API_KEY: ci-only-mailbox-key
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,7 +68,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: nvpetri/APIBonamassa
-          ref: e2e3491741091b522272ebe3e43272a232fc701a
+          ref: 40e3b4569ba70b508e9df16c3de4471a4a5dfb35
           path: _api
           persist-credentials: false
       - run: npm ci
@@ -74,6 +78,7 @@ jobs:
       - name: Iniciar API de teste
         working-directory: _api
         run: |
+          node scripts/test-mailer.mjs > "$RUNNER_TEMP/mailbox.log" 2>&1 &
           NODE_ENV=test npm start > "$RUNNER_TEMP/api.log" 2>&1 &
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:3001/v1/health; then exit 0; fi

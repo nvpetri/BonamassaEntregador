@@ -46,14 +46,17 @@ class DriverApiFlowTest {
         }
     }
     private fun manager(): Session = Decode.session(api.request("POST", "/v1/sessions", body = objectOf("storeSlug" to "bonamassa", "email" to "manager@teste.example", "password" to "Manager-ci-only-password-2026")))
-    private fun createDriver(manager: Session, name: String, verify: Boolean = true): User {
+    private fun completeInvitation(user: User) {
+        val email = java.net.URLEncoder.encode(user.email, "UTF-8")
+        val connection = java.net.URL("http://10.0.2.2:3030/messages?to=$email").openConnection().apply { connectTimeout = 10_000; readTimeout = 10_000 }
+        val messages = connection.getInputStream().bufferedReader().use { it.readText() }
+        val token = Regex("#token=([A-Za-z0-9_-]{43})").findAll(messages).last().groupValues[1]
+        api.request("POST", "/v1/auth/staff-invitations/accept", body = objectOf("token" to token, "password" to password, "phone" to "11922223333"))
+    }
+    private fun createDriver(manager: Session, name: String, activate: Boolean = true): User {
         val user = Decode.user(api.request("POST", "/v1/staff/users", manager.accessToken,
-            objectOf("email" to "driver-${key()}@teste.example", "password" to password, "name" to name, "phone" to "11922223333", "role" to "DRIVER"), key()))
-        if (verify) {
-            api.request("POST", "/v1/auth/email-verification/request", body = objectOf("storeSlug" to "bonamassa", "email" to user.email))
-            val session = Decode.session(api.request("POST", "/v1/auth/email-verification/confirm", body = objectOf("storeSlug" to "bonamassa", "email" to user.email, "code" to "123456")))
-            api.logout(session.accessToken)
-        }
+            objectOf("email" to "driver-${key()}@teste.example", "name" to name, "role" to "DRIVER"), key()))
+        if (activate) completeInvitation(user)
         return user
     }
     private fun staff(order: JSONObject, action: String, manager: Session, extra: JSONObject = JSONObject()): JSONObject = api.request("POST", "/v1/staff/orders/${order.getString("id")}/$action", manager.accessToken, extra.put("expectedVersion", order.getInt("version")), key())
@@ -82,19 +85,19 @@ class DriverApiFlowTest {
         val actual = api.delivery(token, id); assertEquals(status, actual.status); return actual
     }
 
-    @Test fun firstAccessRequestsEmailCodeAndPasswordResetRevokesPreviousSessions() {
+    @Test fun firstAccessUsesInvitationAndPasswordResetRevokesPreviousSessions() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
         val manager = manager()
-        val driver = createDriver(manager, "Primeiro acesso", verify = false)
+        val driver = createDriver(manager, "Primeiro acesso", activate = false)
         val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
         secure.write(SavedState(origin = endpoint.origin, slug = endpoint.storeSlug))
         var previous: Session? = null
         ActivityScenario.launch(MainActivity::class.java).use {
             waitText("Entrar nas entregas")
-            input("E-mail", driver.email); click("Confirmar meu e-mail")
-            waitText("Confirme seu e-mail.")
+            waitText("Primeiro acesso?")
             assertNull(secure.read()?.session)
-            input("Código de 6 dígitos", "123456"); click("Confirmar e entrar")
+            completeInvitation(driver)
+            input("E-mail", driver.email); input("Senha", password); click("Entrar nas entregas")
             waitText("Pedidos atribuídos pela Bonamassa")
             previous = requireNotNull(secure.read()?.session)
             assertEquals(driver.id, api.me(previous!!.accessToken).id)

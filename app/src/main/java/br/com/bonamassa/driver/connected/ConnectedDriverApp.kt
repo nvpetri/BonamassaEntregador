@@ -143,7 +143,7 @@ private fun LoginScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Spacer(Modifier.height(12.dp))
         Text(when (mode) { "verify" -> "Confirme seu e-mail."; "forgot" -> "Recupere seu acesso."; "reset" -> "Crie uma nova senha."; else -> "Sua próxima entrega\ncomeça aqui." }, style = MaterialTheme.typography.headlineLarge)
-        Text(when (mode) { "verify" -> "Digite o código de 6 dígitos enviado para $email."; "forgot" -> "Vamos enviar um código para o seu e-mail."; "reset" -> "Informe o código recebido e a nova senha."; else -> "Entre com a conta cadastrada pela pizzaria." }, color = Brand.Muted)
+        Text(when (mode) { "verify" -> "Digite o código de 6 dígitos enviado para $email."; "forgot" -> "Vamos enviar um código para o seu e-mail."; "reset" -> "Informe o código recebido e a nova senha."; else -> "Primeiro acesso? Complete o cadastro pelo link enviado ao seu e-mail. Depois, entre com sua senha." }, color = Brand.Muted)
         Panel {
             if (mode != "verify" && mode != "reset") Input("E-mail", email, { email = it.take(254) }, !ui.busy, KeyboardType.Email)
             if (mode in listOf("verify", "reset")) Input("Código de 6 dígitos", code, { code = it.filter(Char::isDigit).take(6) }, !ui.busy, KeyboardType.Number)
