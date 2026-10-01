@@ -41,6 +41,24 @@ class DeliveryRouteTest {
         assertEquals(longStops, routeLegs(longStops).flatMap { it.stops })
         assertThrows(IllegalArgumentException::class.java) { routeLegs(groupDeliveries(listOf(delivery(a = null)))) }
     }
+    @Test fun nearestStopsUseVerifiedCoordinatesAndNextLegStartsAtPreviousDestination() {
+        val origin = GeoPoint(-23.55, -46.63)
+        val far = delivery(1, address.copy(number = "1")).copy(navigation = DeliveryNavigation(7000, address.copy(number = "100"), origin, GeoPoint(-23.57, -46.65)))
+        val near = delivery(9, address.copy(number = "9")).copy(navigation = DeliveryNavigation(1000, address.copy(number = "100"), origin, GeoPoint(-23.551, -46.631)))
+        val sameBuilding = delivery(10, near.address!!.copy(complement = "Apto 33")).copy(navigation = near.navigation)
+        val legacy = delivery(2, address.copy(number = "2"))
+        val stops = groupDeliveries(listOf(far, legacy, sameBuilding, near))
+        assertEquals(listOf(listOf(near.id, sameBuilding.id), listOf(far.id), listOf(legacy.id)), stops.map { it.deliveries.map { order -> order.id } })
+        assertEquals(1000L, stops.first().distanceMeters)
+        val numbered = (1..7).map { n -> delivery(n, address.copy(number = n.toString())).copy(navigation = DeliveryNavigation(n * 1000L, address, origin, GeoPoint(-23.55 - n * 0.001, -46.63))) }
+        val legs = routeLegs(groupDeliveries(numbered.reversed()))
+        assertEquals(2, legs.size)
+        assertEquals(origin.route, legs[0].url.toHttpUrl().queryParameter("origin"))
+        assertEquals(legs[0].stops.last().destination, legs[1].url.toHttpUrl().queryParameter("origin"))
+        assertEquals(numbered.map { it.id }, legs.flatMap { it.stops.flatMap { stop -> stop.deliveries.map { order -> order.id } } })
+        assertEquals(numbered[3].navigation?.destination?.route, legs[0].url.toHttpUrl().queryParameter("destination"))
+        assertEquals(numbered.take(3).map { it.navigation?.destination?.route }, legs[0].url.toHttpUrl().queryParameter("waypoints")?.split('|'))
+    }
     @Test fun batchPersistsAllVersionsAndRetryUsesOneRequestWithTheSameKey() {
         val selected = listOf(delivery(), delivery(2).copy(deliveryStatus = "COLLECTED"))
         MockWebServer().use { server ->

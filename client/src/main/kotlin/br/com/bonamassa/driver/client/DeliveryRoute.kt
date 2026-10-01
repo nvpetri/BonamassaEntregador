@@ -4,7 +4,11 @@ import java.net.URLEncoder
 import java.text.Normalizer
 import java.util.Locale
 
-data class DeliveryStop(val key: String, val address: Address?, val deliveries: List<Delivery>)
+data class DeliveryStop(val key: String, val address: Address?, val deliveries: List<Delivery>) {
+    val distanceMeters get() = deliveries.mapNotNull { it.navigation?.distanceMeters }.minOrNull()
+    val destination get() = deliveries.firstNotNullOfOrNull { it.navigation?.destination?.route } ?: address?.route
+    val origin get() = deliveries.firstNotNullOfOrNull { it.navigation?.origin?.route ?: it.navigation?.originAddress?.route }
+}
 val Delivery.canStartRoute get() = status == "READY" && deliveryStatus in setOf("ASSIGNED", "COLLECTED")
 
 /** A stop is a building/address; each apartment/customer remains a distinct delivery. */
@@ -18,6 +22,8 @@ fun groupDeliveries(deliveries: List<Delivery>): List<DeliveryStop> {
                 .map(::normalize).joinToString("") { "${it.length}:$it" }
         } ?: "missing:${d.id}" }
         .map { (key, orders) -> DeliveryStop(key, orders.first().address, orders) }
+        .sortedWith(compareBy<DeliveryStop> { it.distanceMeters ?: Long.MAX_VALUE }
+            .thenBy { it.deliveries.first().createdAt }.thenBy { it.deliveries.first().number }.thenBy { it.key })
 }
 
 data class RouteLeg(val url: String, val stops: List<DeliveryStop>)
@@ -25,17 +31,19 @@ data class RouteLeg(val url: String, val stops: List<DeliveryStop>)
 fun routeLegs(stops: List<DeliveryStop>): List<RouteLeg> {
     require(stops.isNotEmpty() && stops.all { it.address != null }) { "Confirme os endereços com a pizzaria antes de abrir a rota." }
     fun encode(text: String) = URLEncoder.encode(text, "UTF-8")
+    var origin = stops.first().origin
     fun url(part: List<DeliveryStop>): String {
-        val destination = encode(requireNotNull(part.last().address).route)
-        val points = part.dropLast(1).joinToString("|") { requireNotNull(it.address).route }
+        val destination = encode(requireNotNull(part.last().destination))
+        val points = part.dropLast(1).joinToString("|") { requireNotNull(it.destination) }
         return "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=$destination" +
+            (origin?.let { "&origin=${encode(it)}" } ?: "") +
             (if (points.isEmpty()) "" else "&waypoints=${encode(points)}")
     }
     val result = mutableListOf<RouteLeg>()
     var part = mutableListOf<DeliveryStop>()
     for (stop in stops) {
         if (part.isNotEmpty() && (part.size == 4 || url(part + stop).length > 2048)) {
-            result += RouteLeg(url(part), part.toList()); part = mutableListOf()
+            result += RouteLeg(url(part), part.toList()); origin = part.last().destination; part = mutableListOf()
         }
         part += stop
         require(url(part).length <= 2048) { "Endereço longo demais para o Maps. Abra o pedido e confira o destino." }

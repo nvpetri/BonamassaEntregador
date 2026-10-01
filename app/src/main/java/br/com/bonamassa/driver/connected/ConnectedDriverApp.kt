@@ -227,7 +227,7 @@ private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (Strin
                         }
                     }
                 }
-                Text("Paradas na ordem do pedido mais antigo de cada endereço. Confira a sequência no Maps antes de dirigir.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                Text("Paradas da mais próxima da pizzaria à mais distante, pela distância do trajeto. Pedidos antigos sem distância ficam ao final; confira esses endereços antes de sair.", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
             }
         }
         item {
@@ -243,7 +243,7 @@ private fun QueueScreen(ui: DriverUi, available: (Boolean) -> Unit, open: (Strin
         items(groups, key = { it.key }) { stop ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stop.address?.let { "${it.street}, ${it.number} · ${it.city}/${it.state}" } ?: "Endereço a confirmar", style = MaterialTheme.typography.titleMedium, color = Brand.Gold)
-                Text("${stop.deliveries.size} pedido(s) neste endereço", style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
+                Text("${stop.deliveries.size} pedido(s) neste endereço" + (stop.distanceMeters?.let { " · ${String.format(java.util.Locale.forLanguageTag("pt-BR"), "%.2f", it / 1000.0)} km da pizzaria" } ?: ""), style = MaterialTheme.typography.bodySmall, color = Brand.Muted)
                 stop.deliveries.forEach { d -> DeliveryCard(d) { open(d.id) } }
             }
         }
@@ -392,8 +392,9 @@ private fun RouteStartDialog(batch: List<Delivery>, enabled: Boolean, dismiss: (
     AlertDialog(onDismissRequest = dismiss, title = { Text("Conferir saída conjunta") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("${batch.size} pedidos serão marcados como a caminho. A pizzaria e os clientes receberão a atualização.")
-            groupDeliveries(batch).forEach { stop ->
-                Text(stop.address?.route ?: "Endereço não informado", style = MaterialTheme.typography.titleSmall)
+            Text("Entregas da mais próxima da pizzaria à mais distante. Sem distância calculada, confira o endereço antes de sair.")
+            groupDeliveries(batch).forEachIndexed { index, stop ->
+                Text("${index + 1}. " + (stop.address?.route ?: "Endereço não informado") + (stop.distanceMeters?.let { " · ${String.format(java.util.Locale.forLanguageTag("pt-BR"), "%.2f", it / 1000.0)} km" } ?: ""), style = MaterialTheme.typography.titleSmall)
                 stop.deliveries.forEach { d ->
                     Text("#${d.number} · ${d.customer}" + d.address?.complement?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty())
                     Text(d.items.joinToString("; ") { "${it.quantity}× ${it.name}" }, style = MaterialTheme.typography.bodySmall)

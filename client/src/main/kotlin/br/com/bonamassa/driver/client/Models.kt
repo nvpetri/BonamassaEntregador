@@ -14,6 +14,10 @@ data class Address(val street: String, val number: String, val neighborhood: Str
     val complement: String = "", val noComplement: Boolean = false) {
     val route get() = "$street, $number, $neighborhood, $city - $state, $postalCode, Brasil"
 }
+data class GeoPoint(val latitude: Double, val longitude: Double) {
+    val route get() = "$latitude,$longitude"
+}
+data class DeliveryNavigation(val distanceMeters: Long?, val originAddress: Address?, val origin: GeoPoint?, val destination: GeoPoint?)
 data class Item(val name: String, val detail: String, val note: String, val quantity: Int, val components: List<Item> = emptyList())
 data class Event(val action: String, val version: Int, val createdAt: String)
 enum class Command(val path: String, val label: String) {
@@ -24,7 +28,7 @@ data class Delivery(val id: String, val number: Int, val version: Int, val statu
     val customer: String, val phone: String, val address: Address?, val note: String, val items: List<Item>,
     val payment: String, val paymentRecorded: Boolean, val cashTendered: Long?, val change: Long,
     val total: Long, val driverFee: Long, val driverEarnings: Long, val recipient: String?,
-    val createdAt: String, val updatedAt: String, val events: List<Event>) {
+    val createdAt: String, val updatedAt: String, val events: List<Event>, val navigation: DeliveryNavigation? = null) {
     val active get() = status !in setOf("DELIVERED", "RETURNED", "CANCELLED")
     val needsPayment get() = !paymentRecorded && total > 0
     val label get() = when (deliveryStatus) {
@@ -48,6 +52,9 @@ object Decode {
     fun session(j: JSONObject) = Session(j.getString("accessToken"), j.getString("expiresAt"), user(j.getJSONObject("user")))
     private fun item(j: JSONObject): Item = Item(j.getString("name"), j.optString("detail", ""), j.optString("note", ""),
         j.getInt("quantity"), j.optJSONArray("components")?.objects(::item) ?: emptyList())
+    private fun address(j: JSONObject) = Address(j.getString("street"), j.getString("number"), j.getString("neighborhood"), j.getString("city"), j.getString("state"), j.getString("postalCode"), j.optString("reference", ""), j.optString("complement", ""), j.optBoolean("noComplement", false))
+    private fun point(j: JSONObject) = GeoPoint(j.getDouble("latitude"), j.getDouble("longitude"))
+    private fun navigation(j: JSONObject) = DeliveryNavigation(if (j.isNull("distanceMeters")) null else j.getLong("distanceMeters"), j.optJSONObject("origin")?.optJSONObject("address")?.let(::address), j.optJSONObject("origin")?.optJSONObject("location")?.let(::point), j.optJSONObject("destination")?.let(::point))
     fun delivery(j: JSONObject): Delivery {
         val customer = j.getJSONObject("customer")
         return Delivery(j.getString("id"), j.getInt("number"), j.getInt("version"), j.getString("status"), j.textOrNull("deliveryStatus"),
@@ -55,7 +62,7 @@ object Decode {
                 Address(it.getString("street"), it.getString("number"), it.getString("neighborhood"), it.getString("city"), it.getString("state"), it.getString("postalCode"), it.optString("reference", ""), it.optString("complement", ""), it.optBoolean("noComplement", false))
             }, j.optString("note", ""), j.getJSONArray("items").objects(::item), j.getString("payment"), j.getBoolean("paymentRecorded"),
             if (j.isNull("cashTendered")) null else j.getLong("cashTendered"), j.getLong("change"), j.getLong("total"), j.getLong("driverFee"), j.getLong("driverEarnings"),
-            j.textOrNull("recipient"), j.getString("createdAt"), j.getString("updatedAt"), j.getJSONArray("events").objects { Event(it.getString("action"), it.getInt("version"), it.getString("createdAt")) })
+            j.textOrNull("recipient"), j.getString("createdAt"), j.getString("updatedAt"), j.getJSONArray("events").objects { Event(it.getString("action"), it.getInt("version"), it.getString("createdAt")) }, j.optJSONObject("delivery")?.let(::navigation))
     }
     fun page(j: JSONObject) = Page(j.getJSONArray("items").objects(::delivery), j.textOrNull("nextCursor"))
 }

@@ -68,3 +68,5 @@ Detalhes: [integração](docs/INTEGRACAO.md) e [verificação](docs/VERIFICACAO.
 ## Preparação para produção
 
 Leia [docs/PRODUCAO.md](docs/PRODUCAO.md) antes de distribuir o aplicativo. O release agora valida HTTPS e recusa flags demo/integração. Compilar não assina nem publica: o guia explica servidor definitivo, assinatura, atualização segura e testes em aparelho real.
+
+Frete por distância e endereços: [configuração e integração](docs/FRETE-E-ROTAS.md).

@@ -238,6 +238,54 @@ class DriverApiFlowTest {
         }
     }
 
+    @Test fun distanceBasedRouteStartsAtStoreAndShowsNearestStopFirst() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
+        val manager = manager()
+        val original = api.request("GET", "/v1/staff/catalog", manager.accessToken).getJSONObject("store")
+        fun settings(extra: JSONObject) {
+            val store = api.request("GET", "/v1/staff/catalog", manager.accessToken).getJSONObject("store")
+            val body = objectOf("expectedVersion" to store.getInt("version"), "name" to store.getString("name"), "deliveryFee" to store.getInt("deliveryFee"), "driverFee" to store.getInt("driverFee"))
+            extra.keys().forEach { body.put(it, extra.get(it)) }
+            api.request("PATCH", "/v1/staff/store", manager.accessToken, body, key())
+        }
+        try {
+            settings(objectOf("address" to objectOf("street" to "Rua do Teste", "number" to "10", "neighborhood" to "Centro", "city" to "São Paulo", "state" to "SP", "postalCode" to "01001000", "reference" to ""),
+                "deliveryPricingMode" to "DISTANCE", "deliveryBands" to JSONArray((1..5).map { objectOf("upToMeters" to it * 2000, "fee" to 300 + it * 200) })))
+            val driver = createDriver(manager, "Motoboy Distâncias")
+            var auth = api.signIn(driver.email, password)
+            api.send(auth.accessToken, Pending.availability(true, endpoint, auth.user)); auth = auth.copy(user = api.me(auth.accessToken))
+            val far = order(manager, driver, "CARD", number = "50")
+            val near = order(manager, driver, "CARD", number = "20")
+            val middle = order(manager, driver, "CARD", number = "40")
+            val selected = listOf(far, near, middle).map { api.delivery(auth.accessToken, it.getString("id")) }
+            val stops = groupDeliveries(selected)
+            assertEquals(listOf("20", "40", "50"), stops.map { it.address?.number })
+            assertEquals(listOf(1000L, 3000L, 4000L), stops.map { it.distanceMeters })
+            assertEquals(500, near.getInt("fee")); assertEquals(700, far.getInt("fee"))
+            val expectedOrigin = requireNotNull(stops.first().origin)
+            val secure = SecureStore(InstrumentationRegistry.getInstrumentation().targetContext)
+            secure.write(SavedState(endpoint.origin, "bonamassa", auth.user, auth))
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitText("Disponível para coletas")
+                scrollQueue("Iniciar rota com 3 pedidos"); click("Iniciar rota com 3 pedidos")
+                waitText("Conferir saída conjunta")
+                compose.onNodeWithText("Conferi e retirei todos os pedidos desta lista").performScrollTo().performClick()
+                click("Confirmar e iniciar todas")
+                compose.waitUntil(60_000) { secure.read()?.pending == null && selected.all { api.delivery(auth.accessToken, it.id).deliveryStatus == "ON_ROUTE" } }
+                val active = selected.map { api.delivery(auth.accessToken, it.id) }
+                val leg = routeLegs(groupDeliveries(active)).single()
+                assertTrue(leg.url.contains("origin="))
+                assertEquals(expectedOrigin, java.net.URLDecoder.decode(leg.url.substringAfter("&origin=").substringBefore('&'), "UTF-8"))
+                assertEquals(near.getString("id"), leg.stops.first().deliveries.first().id)
+                scrollQueue("Abrir rota no Google Maps")
+                compose.onNodeWithText("Abrir rota no Google Maps").assertExists()
+                screenshot("entregador-rota-por-distancia.png")
+            }
+        } finally {
+            settings(objectOf("address" to if (original.isNull("address")) null else original.getJSONObject("address"), "deliveryPricingMode" to "FLAT"))
+        }
+    }
+
     @Test fun reassignmentsRetriesReturnsAndExpiredSessionsStayConsistent() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("bonamassaIntegration") == "true")
         val manager = manager(); val driver = createDriver(manager, "Entregador Recuperação"); val other = createDriver(manager, "Outro Entregador")

@@ -1,6 +1,6 @@
 # Integração com APIBonamassa
 
-Cliente compatível com o contrato da API em `40e3b4569ba70b508e9df16c3de4471a4a5dfb35`, a mesma revisão usada pelo painel e Android cliente nos testes integrados.
+Cliente compatível com o contrato da API em `ad0093049271d925aa49d899b86e58238abdb139`, a mesma revisão usada pelo painel e Android cliente nos testes integrados.
 
 | Operação | Endpoint |
 |---|---|
@@ -47,4 +47,4 @@ Push, rastreamento em segundo plano, endereço/contato da loja, fechamento de tu
 
 A equipe é cadastrada pelo gerente com nome, função e e-mail. O funcionário completa o cadastro pelo link de convite no navegador; entregadores definem senha e telefone antes de entrar no aplicativo. Os testes recebem o convite na caixa de e-mail local descartável da API e validam o login após a ativação. Contas de clientes continuam usando o cadastro e a confirmação de e-mail existentes.
 
-Auditoria central: o cliente identifica suas requisições com X-Client-Source, como pista de origem. A identidade responsável continua sendo validada pelo token na API. CI utiliza API `07a73957de48267384b35a21068cea1380dc64fa`, com migração de AuditTrail e rastreamento transacional.
+Auditoria central: o cliente identifica suas requisições com X-Client-Source, como pista de origem. A identidade responsável continua sendo validada pelo token na API. CI utiliza API `ad0093049271d925aa49d899b86e58238abdb139`, com migração de AuditTrail e rastreamento transacional.

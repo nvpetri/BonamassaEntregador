@@ -12,4 +12,4 @@ Depois da saída, use “Abrir rota no Google Maps”. A sequência segue o pedi
 
 Validação automatizada: testes JVM para agrupamento sem mistura de números/cidades, apartamentos preservados, URLs/trechos, persistência e repetição do lote; teste instrumentado cria três pedidos em dois endereços, exige conferência, inicia todos, confere painel, conclui só um e recupera um lote após perda da resposta. API/PostgreSQL são descartáveis, separados da loja pública.
 
-`versionCode=4`. Instale com a mesma assinatura para preservar a sessão e os envios pendentes. Leia também [PRODUCAO.md](PRODUCAO.md) e o [contrato e roteiro completo](https://github.com/nvpetri/APIBonamassa/blob/codex/cep-sacola-rotas/docs/CEP-SACOLA-ROTAS.md).
+`versionCode=5`. Instale com a mesma assinatura para preservar a sessão e os envios pendentes. Leia também [PRODUCAO.md](PRODUCAO.md) e o [contrato e roteiro completo](https://github.com/nvpetri/APIBonamassa/blob/codex/cep-sacola-rotas/docs/CEP-SACOLA-ROTAS.md).
